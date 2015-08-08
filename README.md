@@ -13,13 +13,20 @@ Use [npm](https://www.npmjs.com/) to install the module:
 Then use `require()` to load it in your code:
 
 ```javascript
-	var Request = require('pixl-request');
+	var PixlRequest = require('pixl-request');
+```
+
+Instantiate a request object and pass in an optional user agent string:
+
+```javascript
+	var request = new PixlRequest();
+	var request = new PixlRequest( "My Custom Agent 1.0" );
 ```
 
 Here is a simple HTTP GET example:
 
 ```javascript
-	Request.get( 'http://www.bitstamp.net/api/ticker/', function(err, resp, data) {
+	request.get( 'http://www.bitstamp.net/api/ticker/', function(err, resp, data) {
 		if (err) console.log("ERROR: " + err);
 		else console.log("Success: " + data);
 	} );
@@ -28,11 +35,24 @@ Here is a simple HTTP GET example:
 And here is a simple JSON REST API request:
 
 ```javascript
-	Request.json( 'http://myserver.com/api', { foo: "test", bar: 123 }, function(err, resp, data) {
+	request.json( 'http://myserver.com/api', { foo: "test", bar: 123 }, function(err, resp, data) {
 		if (err) console.log("ERROR: " + err);
 		else console.log( "JSON Response: ", data );
 	} );
 ```
+
+# Method List
+
+Here are all the methods available in the request library:
+
+| Method Name | Description |
+|---------------|-------------|
+| [get()](#http-get) | Performs an HTTP GET request. |
+| [post()](#http-post) | Performs an HTTP POST request. |
+| [json()](#json-rest-api) | Sends a request to a JSON REST API endpoint and parses the response. |
+| [xml()](#xml-rest-api) | Sends a request to an XML REST API endpoint and parses the response. |
+| [setHeader()](#default-headers) | Overrides or adds a default header for future requests. |
+| [setTimeout()](#handling-timeouts) | Overrides the default socket idle timeout (milliseconds). |
 
 # Request Types
 
@@ -41,14 +61,14 @@ Here are all the request types supported by the library.
 ## HTTP GET
 
 ```
-	Request.get( URL, CALLBACK )
-	Request.get( URL, OPTIONS, CALLBACK )
+	get( URL, CALLBACK )
+	get( URL, OPTIONS, CALLBACK )
 ```
 
-To perform a simple HTTP GET, call the `Request.get()` method.  All you need to provide is the URL and a callback:
+To perform a simple HTTP GET, call the `get()` method.  All you need to provide is the URL and a callback:
 
 ```javascript
-	Request.get( 'http://www.bitstamp.net/api/ticker/', function(err, resp, data) {
+	request.get( 'http://www.bitstamp.net/api/ticker/', function(err, resp, data) {
 		if (err) console.log("ERROR: " + err);
 		else {
 			console.log("Status: " + resp.statusCode + " " + resp.statusMessage);
@@ -63,13 +83,12 @@ Your callback function is passed an error object (which will be false upon succe
 To specify additional options, such as custom request headers, include an object just before the callback:
 
 ```javascript
-	var options = {
+	request.get( 'http://www.bitstamp.net/api/ticker/', {
 		headers: {
 			'X-Custom-Header': "My custom value"	
 		}
-	};
-	
-	Request.get( 'http://www.bitstamp.net/api/ticker/', options, function(err, resp, data) {
+	}, 
+	function(err, resp, data) {
 		if (err) console.log("ERROR: " + err);
 		else {
 			console.log("Status: " + resp.statusCode + " " + resp.statusMessage);
@@ -86,10 +105,10 @@ By default, connections are closed at the end of each request.  If you want to r
 ## HTTP POST
 
 ```
-	Request.post( URL, OPTIONS, CALLBACK )
+	post( URL, OPTIONS, CALLBACK )
 ```
 
-To perform a HTTP POST, call the `Request.post()` method.  Provide a URL, an options object with a `data` property containing your key/value pairs, and a callback function:
+To perform a HTTP POST, call the `post()` method.  Provide a URL, an options object with a `data` property containing your key/value pairs, and a callback function:
 
 ```javascript
 	request.post( 'http://myserver.com/api/post', {
@@ -139,7 +158,7 @@ Note that you can use [Buffer](https://nodejs.org/api/buffer.html) objects inste
 
 ## File Uploads
 
-To upload files, use `Request.post()` and include a `files` object with your options, containing key/pair pairs.  Each file needs an identifier key (POST field name), and a value which should be a path to the file on disk:
+To upload files, use `post()` and include a `files` object with your options, containing key/pair pairs.  Each file needs an identifier key (POST field name), and a value which should be a path to the file on disk:
 
 ```javascript
 	request.post( 'http://myserver.com/api/upload', {
@@ -209,14 +228,13 @@ To reuse the same socket connection across multiple requests, you need to use a 
 	var http = require('http');
 	var agent = new http.Agent({ keepAlive: true });
 	
-	var options = {
+	request.get( 'http://myserver.com/api/get', {
 		agent: agent, // custom agent for connection pooling
 		headers: {
 			'X-Custom-Header': "My custom value"	
 		}
-	};
-	
-	Request.get( 'http://myserver.com/api/get', options, function(err, resp, data) {
+	}, 
+	function(err, resp, data) {
 		if (err) console.log("ERROR: " + err);
 		else console.log("Success: " + data);
 	} );
@@ -227,14 +245,14 @@ You can then use the same `agent` object for subsequent requests on the same hos
 ## JSON REST API
 
 ```
-	Request.json( URL, JSON, CALLBACK )
-	Request.json( URL, JSON, OPTIONS, CALLBACK )
+	json( URL, JSON, CALLBACK )
+	json( URL, JSON, OPTIONS, CALLBACK )
 ```
 
-The `Request.json()` method is designed for sending requests to JSON REST APIs.  If you want to send a JSON REST style HTTP POST to an API endpoint, and expect to receive a JSON formatted response, this wraps up all the serialization and parsing for you.  Example:
+The `json()` method is designed for sending requests to JSON REST APIs.  If you want to send a JSON REST style HTTP POST to an API endpoint, and expect to receive a JSON formatted response, this wraps up all the serialization and parsing for you.  Example:
 
 ```javascript
-	Request.json( 'http://myserver.com/api', { foo: "test", bar: 123 }, function(err, resp, data) {
+	request.json( 'http://myserver.com/api', { foo: "test", bar: 123 }, function(err, resp, data) {
 		if (err) console.log("ERROR: " + err);
 		else console.log( "Success: ", data );
 	} );
@@ -250,13 +268,12 @@ You can also specify options such as custom request headers using this API.  Sim
 		bar: 123
 	};
 	
-	var options = {
+	request.json( 'http://myserver.com/api', json, {
 		headers: {
 			'X-Custom-Header': "My custom value"	
 		}
-	};
-	
-	Request.json( 'http://myserver.com/api', json, options, function(err, resp, data) {
+	}, 
+	function(err, resp, data) {
 		if (err) console.log("ERROR: " + err);
 		else console.log( "Success: ", data );
 	} );
@@ -267,14 +284,14 @@ You can also specify options such as custom request headers using this API.  Sim
 ## XML REST API
 
 ```
-	Request.xml( URL, XML, CALLBACK )
-	Request.xml( URL, XML, OPTIONS, CALLBACK )
+	xml( URL, XML, CALLBACK )
+	xml( URL, XML, OPTIONS, CALLBACK )
 ```
 
-The `Request.xml()` method is designed for sending requests to XML REST APIs.  If you want to send a XML REST style HTTP POST to an API endpoint, and expect to receive a XML formatted response, this wraps up all the serialization and parsing for you.  Example:
+The `xml()` method is designed for sending requests to XML REST APIs.  If you want to send a XML REST style HTTP POST to an API endpoint, and expect to receive a XML formatted response, this wraps up all the serialization and parsing for you.  Example:
 
 ```javascript
-	Request.xml( 'http://myserver.com/api', { foo: "test", bar: 123 }, function(err, resp, data) {
+	request.xml( 'http://myserver.com/api', { foo: "test", bar: 123 }, function(err, resp, data) {
 		if (err) console.log("ERROR: " + err);
 		else console.log( "Success: ", data );
 	} );
@@ -290,13 +307,12 @@ You can also specify options such as custom request headers using this API.  Sim
 		bar: 123
 	};
 	
-	var options = {
+	request.xml( 'http://myserver.com/api', xml, {
 		headers: {
 			'X-Custom-Header': "My custom value"	
 		}
-	};
-	
-	Request.xml( 'http://myserver.com/api', xml, options, function(err, resp, data) {
+	}, 
+	function(err, resp, data) {
 		if (err) console.log("ERROR: " + err);
 		else console.log( "Success: ", data );
 	} );
@@ -333,11 +349,10 @@ By default, the XML will be serialized to a document with `<Request>` as the roo
 		bar: 123
 	};
 	
-	var options = {
+	request.xml( 'http://myserver.com/api', xml, {
 		xmlRootNode: 'Document'
-	};
-	
-	Request.xml( 'http://myserver.com/api', xml, options, function(err, resp, data) {
+	}, 
+	function(err, resp, data) {
 		if (err) console.log("ERROR: " + err);
 		else console.log( "Success: ", data );
 	} );
@@ -374,10 +389,16 @@ You can override these by passing in custom headers with your request:
 	} );
 ```
 
-Or by overriding the module defaults:
+Or by overriding your class instance defaults before making a request:
 
 ```javascript
-	Request.defaultHeaders = {
+	request.setHeader( 'Accept-Encoding', "none" );
+```
+
+You can also replace the entire header set by rewriting the `defaultHeaders` property:
+
+```javascript
+	request.defaultHeaders = {
 		'User-Agent': "My Request Library!",
 		'Accept-Encoding': "none"
 	};
@@ -402,10 +423,10 @@ The default idle socket timeout for all requests is 30 seconds.  You can customi
 	} );
 ```
 
-Or by resetting the module default:
+Or by resetting the default on your class instance, using the `setTimeout()` method:
 
 ```javascript
-	Request.defaultTimeout = 10 * 1000; // 10 seconds
+	request.setTimeout( 10 * 1000 ); // 10 seconds
 ```
 
 When a timeout occurs, an `error` event is emitted.  The error message will follow this syntax: `Socket Timeout (### ms)`.

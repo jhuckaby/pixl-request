@@ -11,16 +11,39 @@ var util = require('util');
 
 var FormData = require('form-data');
 var XML = require('pixl-xml');
+var Class = require('pixl-class');
 
-module.exports = {
+var pixlreq_agent = "PixlRequest " + require('./package.json').version;
+
+module.exports = Class.create({
 	
-	defaultHeaders: {
-		'User-Agent': "PixlRequest " + require('./package.json').version,
-		'Accept-Encoding': "gzip"
-	},
+	defaultHeaders: null,
 	
 	// default idle timeout of 30 seconds
 	defaultTimeout: 30000,
+	
+	__construct: function(useragent) {
+		// class constructor
+		this.defaultHeaders = {
+			'Accept-Encoding': "gzip"
+		};
+		this.setUserAgent( useragent || pixlreq_agent );
+	},
+	
+	setHeader: function(name, value) {
+		// override or add a default header
+		this.defaultHeaders[name] = value;
+	},
+	
+	setUserAgent: function(useragent) {
+		// override the default user agent string
+		this.setHeader('User-Agent', useragent);
+	},
+	
+	setTimeout: function(timeout) {
+		// override the default timeout (milliseconds)
+		this.defaultTimeout = timeout;
+	},
 	
 	json: function(url, data, options, callback) {
 		// convenience method: post json, get json back
@@ -274,4 +297,4 @@ module.exports = {
 		else req.end();
 	}
 	
-};
+});
