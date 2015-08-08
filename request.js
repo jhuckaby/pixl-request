@@ -198,6 +198,7 @@ module.exports = Class.create({
 		if (!options.hostname) options.hostname = parts.hostname;
 		if (!options.port) options.port = parts.port || ((parts.protocol == 'https:') ? 443 : 80);
 		if (!options.path) options.path = parts.path;
+		if (!options.auth && parts.auth) options.auth = parts.auth;
 		
 		// default headers
 		if (!options.headers) options.headers = {};

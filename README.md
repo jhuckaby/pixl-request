@@ -80,13 +80,14 @@ To perform a simple HTTP GET, call the `get()` method.  All you need to provide 
 
 Your callback function is passed an error object (which will be false upon success), the HTTP response object from Node ([IncomingMessage](https://nodejs.org/api/http.html#http_http_incomingmessage)), and a data buffer of the content (if any).
 
-To specify additional options, such as custom request headers, include an object just before the callback:
+To specify additional options, such as custom request headers or HTTP authentication, include an object just before the callback:
 
 ```javascript
 	request.get( 'http://www.bitstamp.net/api/ticker/', {
 		headers: {
 			'X-Custom-Header': "My custom value"	
-		}
+		},
+		auth: "username:password"
 	}, 
 	function(err, resp, data) {
 		if (err) console.log("ERROR: " + err);
