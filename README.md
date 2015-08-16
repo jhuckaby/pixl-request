@@ -80,6 +80,8 @@ To perform a simple HTTP GET, call the `get()` method.  All you need to provide 
 
 Your callback function is passed an error object (which will be false upon success), the HTTP response object from Node ([IncomingMessage](https://nodejs.org/api/http.html#http_http_incomingmessage)), and a data buffer of the content (if any).
 
+Note that an "error" in this case is something like a TCP connection failure, DNS lookup failure, socket timeout, connection aborted, or other internal client library failure.  HTTP response codes like 404 or 500 are *not* considered errors, so make sure to look at `resp.statusCode` if you are expecting an HTTP 200.
+
 To specify additional options, such as custom request headers or HTTP authentication, include an object just before the callback:
 
 ```javascript
@@ -130,6 +132,8 @@ To perform a HTTP POST, call the `post()` method.  Provide a URL, an options obj
 Your key/value pairs will be serialized using the `application/x-www-form-urlencoded` format.  For a multipart post, see [Multipart POST](#multipart-post) below.
 
 Your callback function is passed an error object (which will be false upon success), the HTTP response object from Node ([IncomingMessage](https://nodejs.org/api/http.html#http_http_incomingmessage)), and a data buffer of the content (if any).
+
+Note that an "error" in this case is something like a TCP connection failure, DNS lookup failure, socket timeout, connection aborted, or other internal client library failure.  HTTP response codes like 404 or 500 are *not* considered errors, so make sure to look at `resp.statusCode` if you are expecting an HTTP 200.
 
 Check out the Node [http.request](https://nodejs.org/api/http.html#http_http_request_options_callback) documentation for all the properties you can pass in the options object.
 
