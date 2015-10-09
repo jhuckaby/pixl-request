@@ -12,6 +12,7 @@ var util = require('util');
 var FormData = require('form-data');
 var XML = require('pixl-xml');
 var Class = require('pixl-class');
+var ErrNo = require('errno');
 
 var pixlreq_agent = "PixlRequest " + require('./package.json').version;
 
@@ -19,7 +20,7 @@ module.exports = Class.create({
 	
 	defaultHeaders: null,
 	
-	// default idle timeout of 30 seconds
+	// default socket idle timeout of 30 seconds
 	defaultTimeout: 30000,
 	
 	__construct: function(useragent) {
@@ -41,7 +42,7 @@ module.exports = Class.create({
 	},
 	
 	setTimeout: function(timeout) {
-		// override the default timeout (milliseconds)
+		// override the default socket idle timeout (milliseconds)
 		this.defaultTimeout = timeout;
 	},
 	
@@ -231,7 +232,7 @@ module.exports = Class.create({
 			}
 		}
 		
-		// handle timeouts
+		// handle socket timeouts
 		var aborted = false;
 		var timeout = this.defaultTimeout;
 		if ('timeout' in options) {
@@ -275,11 +276,19 @@ module.exports = Class.create({
 		
 		req.on('error', function(e) {
 			// handle socket errors
-			if (callback && !aborted) callback(e);
+			if (callback && !aborted) {
+				var msg = e.toString();
+				if (msg.match(/ENOTFOUND/)) msg = "DNS: Failed to lookup IP from hostname: " + options.hostname;
+				else if (msg.match(/ECONNREFUSED/)) msg = "Connection Refused: Failed to connect to host: " + options.hostname;
+				else if (e.errno && ErrNo.code[e.errno]) {
+					msg = ucfirst(ErrNo.code[e.errno].description) + " (" + e.message + ")";
+				}
+				callback( new Error(msg) );
+			}
 		} );
 		
 		if (timeout) {
-			// set idle socket timeout which aborts the request
+			// set socket idle timeout which aborts the request
 			req.setTimeout( timeout, function() {
 				aborted = true;
 				req.abort();
@@ -299,3 +308,8 @@ module.exports = Class.create({
 	}
 	
 });
+
+function ucfirst(text) {
+	// capitalize first character only, lower-case rest
+	return text.substring(0, 1).toUpperCase() + text.substring(1, text.length).toLowerCase();
+};

@@ -21,6 +21,7 @@
 	],
 	"dependencies": {
 		"form-data": "*",
+		"errno": "*",
 		"pixl-class": "*",
 		"pixl-xml": "*"
 	},

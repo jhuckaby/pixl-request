@@ -411,7 +411,7 @@ You can also replace the entire header set by rewriting the `defaultHeaders` pro
 
 # Handling Timeouts
 
-The default idle socket timeout for all requests is 30 seconds.  You can customize this per request by including a `timeout` property with your options object, and setting it to the number of milliseconds you want:
+The default socket idle timeout for all requests is 30 seconds.  You can customize this per request by including a `timeout` property with your options object, and setting it to the number of milliseconds you want:
 
 ```javascript
 	request.post( 'http://myserver.com/api/post', {
