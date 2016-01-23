@@ -23,6 +23,9 @@ module.exports = Class.create({
 	// default socket idle timeout of 30 seconds
 	defaultTimeout: 30000,
 	
+	// do not follow redirects by default
+	defaultFollow: false,
+	
 	__construct: function(useragent) {
 		// class constructor
 		this.defaultHeaders = {
@@ -44,6 +47,12 @@ module.exports = Class.create({
 	setTimeout: function(timeout) {
 		// override the default socket idle timeout (milliseconds)
 		this.defaultTimeout = timeout;
+	},
+	
+	setFollow: function(follow) {
+		// override the default follow setting (boolean or int)
+		// specify integer to set limit of max redirects to allow
+		this.defaultFollow = follow;
 	},
 	
 	json: function(url, data, options, callback) {
@@ -186,6 +195,7 @@ module.exports = Class.create({
 	request: function(url, options, callback) {
 		// low-level request sender
 		// callback will receive: err, res, data
+		var self = this;
 		if (!options) options = {};
 		
 		// if no agent is specified, use close connections
@@ -240,6 +250,13 @@ module.exports = Class.create({
 			delete options.timeout;
 		}
 		
+		// auto-follow redirects
+		var follow = this.defaultFollow;
+		if ('follow' in options) {
+			follow = options.follow;
+			delete options.follow;
+		}
+		
 		// construct request object
 		var proto_class = (parts.protocol == 'https:') ? https : http;
 		var req = proto_class.request( options, function(res) {
@@ -252,7 +269,25 @@ module.exports = Class.create({
 				total_bytes += chunk.length;
 			} );
 			res.on('end', function() {
-				// end of response, prepare data
+				// end of response
+				
+				// check for auto-redirect
+				if (follow && res.statusCode.toString().match(/^(301|302|307|308)$/) && res.headers['location']) {
+					// revert options to original state
+					options.timeout = timeout;
+					options.follow = (typeof(follow) == 'number') ? (follow - 1) : follow;
+					
+					delete options.hostname;
+					delete options.port;
+					delete options.path;
+					delete options.auth;
+					
+					// recurse into self for redirect
+					self.request( res.headers['location'], options, callback );
+					return;
+				}
+				
+				// prepare data
 				if (total_bytes) {
 					var buf = Buffer.concat(chunks, total_bytes);
 					
