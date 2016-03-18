@@ -226,6 +226,42 @@ function(err, resp, data) {
 
 Including a `files` property automatically sets `multipart/form-data` mode, so you don't need to include the `multipart` boolean flag in this case.
 
+## File Downloads
+
+If you want to download the response data to a file, instead of loading it all into an in-memory Buffer object, you can specify a `download` property in your `options` object, passed to either `get()` or `post()`.  Set this property to a filesystem path, and a file will be created and written to.  Your callback will still be fired when the download is complete, and passed the response object with access to headers, etc.  Example:
+
+```js
+request.get( 'https://upload.wikimedia.org/wikipedia/commons/9/9b/Gustav_chocolate.jpg', {
+	download: '/var/tmp/myimage.jpg'
+}, 
+function(err, resp) {
+	if (err) console.log("ERROR: " + err);
+	else {
+		console.log("Status: " + resp.statusCode + " " + resp.statusMessage);
+		console.log("Headers: ", resp.headers);
+	}
+} );
+```
+
+Your callback will only be invoked when the file is *completely* downloaded and written to the stream.  If the response is Gzip-encoded, this is handled transparently for you using an intermediate stream.  Your file will contain the final decompressed data, and no memory will be used.
+
+Alternatively, if you already have an open stream object, you can pass that to the `download` property.  Example:
+
+```js
+var stream = fs.createWriteStream( '/var/tmp/myimage.jpg', { flags: 'w' } );
+
+request.get( 'https://upload.wikimedia.org/wikipedia/commons/9/9b/Gustav_chocolate.jpg', {
+	download: stream
+}, 
+function(err, resp) {
+	if (err) console.log("ERROR: " + err);
+	else {
+		console.log("Status: " + resp.statusCode + " " + resp.statusMessage);
+		console.log("Headers: ", resp.headers);
+	}
+} );
+```
+
 ## Keep-Alives
 
 To reuse the same socket connection across multiple requests, you need to use a [http.Agent](https://nodejs.org/api/http.html#http_class_http_agent) object (provided by Node).  Simply construct an instance, set the `keepAlive` property to `true`, and pass it into the options object for your requests, using the `agent` property:
@@ -372,7 +408,7 @@ By default the request library will add the following outgoing headers to every 
 
 ```
 User-Agent: PixlRequest 1.0.0
-Accept-Encoding: gzip
+Accept-Encoding: gzip, deflate
 ```
 
 You can override these by passing in custom headers with your request:
@@ -468,7 +504,7 @@ The library recognizes HTTP codes 301, 302, 307 and 308 as "redirect" responses,
 
 # Compressed Responses
 
-The request library automatically handles Gzip-encoded responses that come back from the remote server.  These are transparently decoded for you.  However, you should know that by default all outgoing requests include an `Accept-Encoding: gzip` header, which broadcasts our support for it.  If you do not want responses to be compressed, you can unset this header.  See the [Default Headers](#default-headers) section above.
+The request library automatically handles Gzip-encoded responses that come back from the remote server.  These are transparently decoded for you.  However, you should know that by default all outgoing requests include an `Accept-Encoding: gzip, deflate` header, which broadcasts our support for it.  If you do not want responses to be compressed, you can unset this header.  See the [Default Headers](#default-headers) section above.
 
 # License
 

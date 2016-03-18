@@ -1,5 +1,5 @@
 // Very simple HTTP request library for Node.js
-// Copyright (c) 2015 Joseph Huckaby
+// Copyright (c) 2015 - 2016 Joseph Huckaby
 // Released under the MIT License
 
 var fs = require('fs');
@@ -29,7 +29,7 @@ module.exports = Class.create({
 	__construct: function(useragent) {
 		// class constructor
 		this.defaultHeaders = {
-			'Accept-Encoding': "gzip"
+			'Accept-Encoding': "gzip, deflate"
 		};
 		this.setUserAgent( useragent || pixlreq_agent );
 	},
@@ -257,57 +257,107 @@ module.exports = Class.create({
 			delete options.follow;
 		}
 		
+		// stream mode
+		var download = null;
+		if ('download' in options) {
+			download = options.download;
+			if (typeof(download) == 'string') {
+				try { download = fs.createWriteStream(download); }
+				catch (err) {
+					if (callback) callback(err);
+					return;
+				}
+				download.on('error', function(err) {
+					if (callback) callback(err);
+					return;
+				});
+			}
+			delete options.download;
+		}
+		
 		// construct request object
 		var proto_class = (parts.protocol == 'https:') ? https : http;
 		var req = proto_class.request( options, function(res) {
 			// got response headers
-			var chunks = [];
-			var total_bytes = 0;
-			res.on('data', function (chunk) {
-				// got chunk of data
-				chunks.push( chunk );
-				total_bytes += chunk.length;
-			} );
-			res.on('end', function() {
-				// end of response
+			
+			// check for auto-redirect
+			if (follow && res.statusCode.toString().match(/^(301|302|307|308)$/) && res.headers['location']) {
+				// revert options to original state
+				options.timeout = timeout;
+				options.follow = (typeof(follow) == 'number') ? (follow - 1) : follow;
+				options.download = download;
 				
-				// check for auto-redirect
-				if (follow && res.statusCode.toString().match(/^(301|302|307|308)$/) && res.headers['location']) {
-					// revert options to original state
-					options.timeout = timeout;
-					options.follow = (typeof(follow) == 'number') ? (follow - 1) : follow;
-					
-					delete options.hostname;
-					delete options.port;
-					delete options.path;
-					delete options.auth;
-					
-					// recurse into self for redirect
-					self.request( res.headers['location'], options, callback );
-					return;
+				delete options.hostname;
+				delete options.port;
+				delete options.path;
+				delete options.auth;
+				
+				// recurse into self for redirect
+				self.request( res.headers['location'], options, callback );
+				return;
+			}
+			
+			if (download) {
+				// stream content to a pipe
+				download.on('finish', function() {
+					if (callback) callback( null, res, download );
+				} );
+				
+				if (res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i)) {
+					// gunzip stream
+					res.pipe( zlib.createGunzip() ).pipe( download );
 				}
-				
-				// prepare data
-				if (total_bytes) {
-					var buf = Buffer.concat(chunks, total_bytes);
-					
-					// check for gzip encoding
-					if (res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i) && callback) {
-						zlib.gunzip( buf, function(err, data) {
-							callback( err, res, data );
-						} );
-					}
-					else {
-						// response content is not encoded
-						if (callback) callback( null, res, buf );
-					}
+				else if (res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bdeflate\b/i)) {
+					// inflate stream
+					res.pipe( zlib.createInflate() ).pipe( download );
 				}
 				else {
-					// response content is empty
-					if (callback) callback( null, res, '' );
+					// response is not encoded
+					res.pipe( download );
 				}
-			} );
-		} );
+			} // stream mode
+			else {
+				var chunks = [];
+				var total_bytes = 0;
+				
+				res.on('data', function (chunk) {
+					// got chunk of data
+					chunks.push( chunk );
+					total_bytes += chunk.length;
+				} );
+				
+				res.on('end', function() {
+					// end of response
+					// prepare data
+					if (total_bytes) {
+						var buf = Buffer.concat(chunks, total_bytes);
+						
+						// check for gzip encoding
+						if (res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i) && callback) {
+							// gunzip data first
+							zlib.gunzip( buf, function(err, data) {
+								callback( err, res, data );
+							} );
+						}
+						else if (res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bdeflate\b/i) && callback) {
+							// inflate data first
+							zlib.inflate( buf, function(err, data) {
+								callback( err, res, data );
+							} );
+						}
+						else {
+							// response content is not encoded
+							if (callback) callback( null, res, buf );
+						}
+					}
+					else {
+						// response content is empty
+						if (callback) callback( null, res, new Buffer(0) );
+					}
+				} ); // end
+			} // buffer mode
+			
+		} ); // request
 		
 		req.on('error', function(e) {
 			// handle socket errors
