@@ -26,7 +26,7 @@ var request = new PixlRequest( "My Custom Agent 1.0" );
 Here is a simple HTTP GET example:
 
 ```javascript
-request.get( 'http://www.bitstamp.net/api/ticker/', function(err, resp, data) {
+request.get( 'https://www.bitstamp.net/api/ticker/', function(err, resp, data) {
 	if (err) console.log("ERROR: " + err);
 	else console.log("Success: " + data);
 } );
@@ -69,7 +69,7 @@ get( URL, OPTIONS, CALLBACK )
 To perform a simple HTTP GET, call the `get()` method.  All you need to provide is the URL and a callback:
 
 ```javascript
-request.get( 'http://www.bitstamp.net/api/ticker/', function(err, resp, data) {
+request.get( 'https://www.bitstamp.net/api/ticker/', function(err, resp, data) {
 	if (err) console.log("ERROR: " + err);
 	else {
 		console.log("Status: " + resp.statusCode + " " + resp.statusMessage);
@@ -86,7 +86,7 @@ Note that an "error" in this case is something like a TCP connection failure, DN
 To specify additional options, such as custom request headers or HTTP authentication, include an object just before the callback:
 
 ```javascript
-request.get( 'http://www.bitstamp.net/api/ticker/', {
+request.get( 'https://www.bitstamp.net/api/ticker/', {
 	headers: {
 		'X-Custom-Header': "My custom value"	
 	},
@@ -321,6 +321,8 @@ function(err, resp, data) {
 } );
 ```
 
+If you pass `null` or `false` as the JSON data argument, the request will be sent as a `GET` instead of a `POST`.
+
 **Note:** If the server doesn't send back JSON, or it cannot be parsed, an error will be sent to your callback.
 
 ## XML REST API
@@ -399,6 +401,8 @@ function(err, resp, data) {
 	else console.log( "Success: ", data );
 } );
 ```
+
+If you pass `null` or `false` as the XML data argument, the request will be sent as a `GET` instead of a `POST`.
 
 **Note:** If the server doesn't send back XML, or it cannot be parsed, an error will be sent to your callback.
 

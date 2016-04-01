@@ -56,17 +56,24 @@ module.exports = Class.create({
 	},
 	
 	json: function(url, data, options, callback) {
-		// convenience method: post json, get json back
+		// convenience method: get or post json, get json back
 		if (!callback) {
 			// support 3-arg calling convention
 			callback = options;
 			options = {};
 		}
 		
-		options.json = true;
-		options.data = data;
+		var method = '';
+		if (data) {
+			method = 'post';
+			options.json = true;
+			options.data = data;
+		}
+		else {
+			method = 'get';
+		}
 		
-		this.post( url, options, function(err, res, data) {
+		this[method]( url, options, function(err, res, data) {
 			// got response, check for http error
 			if (err) return callback( err );
 			
@@ -83,17 +90,24 @@ module.exports = Class.create({
 	},
 	
 	xml: function(url, data, options, callback) {
-		// convenience method: post xml, get xml back
+		// convenience method: get or post xml, get xml back
 		if (!callback) {
 			// support 3-arg calling convention
 			callback = options;
 			options = {};
 		}
 		
-		options.xml = true;
-		options.data = data;
+		var method = '';
+		if (data) {
+			method = 'post';
+			options.xml = true;
+			options.data = data;
+		}
+		else {
+			method = 'get';
+		}
 		
-		this.post( url, options, function(err, res, data) {
+		this[method]( url, options, function(err, res, data) {
 			// got response, check for http error
 			if (err) return callback( err );
 			
