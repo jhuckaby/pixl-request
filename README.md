@@ -1,6 +1,6 @@
 # Overview
 
-This module is a very simple wrapper around Node's built-in [http](https://nodejs.org/api/http.html) library.  It provides an easy way to send an HTTP GET or POST, including things like support for HTTPS (SSL), file uploads and JSON REST style API calls.  Gzip-encoded responses are also handled automatically.
+This module is a very simple wrapper around Node's built-in [http](https://nodejs.org/api/http.html) library for making HTTP requests.  It provides an easy way to send an HTTP GET or POST, including things like support for HTTPS (SSL), file uploads and JSON REST style API calls.  Gzip-encoded responses are also handled automatically.
 
 # Usage
 
@@ -16,7 +16,7 @@ Then use `require()` to load it in your code:
 var PixlRequest = require('pixl-request');
 ```
 
-Instantiate a request object and pass in an optional user agent string:
+Instantiate a request object and pass in an optional user agent string (you can also set this later via a header):
 
 ```javascript
 var request = new PixlRequest();
@@ -54,6 +54,8 @@ Here are all the methods available in the request library:
 | [setHeader()](#default-headers) | Overrides or adds a default header for future requests. |
 | [setTimeout()](#handling-timeouts) | Overrides the default socket idle timeout (milliseconds). |
 | [setFollow()](#automatic-redirects) | Overrides the default behavior for following redirects. |
+| [setDNSCache()](#dns-caching) | Enable DNS caching and set the TTL in seconds. |
+| [flushDNSCache()](#flushing-the-cache) | Flush all IPs from the internal DNS cache. |
 
 # Request Types
 
@@ -509,6 +511,86 @@ The library recognizes HTTP codes 301, 302, 307 and 308 as "redirect" responses,
 # Compressed Responses
 
 The request library automatically handles Gzip-encoded responses that come back from the remote server.  These are transparently decoded for you.  However, you should know that by default all outgoing requests include an `Accept-Encoding: gzip, deflate` header, which broadcasts our support for it.  If you do not want responses to be compressed, you can unset this header.  See the [Default Headers](#default-headers) section above.
+
+# Performance Metrics
+
+The request library keeps high resolution performance metrics on every HTTP request, including the DNS lookup time, socket connect time, request send time, wait time, receive time, decompress time, and total elapsed time.  These are all tracked using the [pixl-perf](https://www.npmjs.com/package/pixl-perf) module, and passed to your callback as the 4th argument.  Example:
+
+```js
+request.get( 'https://www.bitstamp.net/api/ticker/', function(err, resp, data, perf) {
+	if (err) console.log("ERROR: " + err);
+	else {
+		console.log("Status: " + resp.statusCode + " " + resp.statusMessage);
+		console.log("Performance: ", perf.metrics());
+	}
+} );
+```
+
+This would output something like the following:
+
+```
+Status: 200 OK
+Performance: {
+  scale: 1000,
+  perf: { 
+     total: 315.508,
+     dns: 100.068,
+     connect: 42.597,
+     send: 118.563,
+     wait: 45.585,
+     receive: 3.017,
+     decompress: 3.929 
+   }
+}
+```
+
+All the `perf` values are in milliseconds (represented by the `scale`).  Here are descriptions of all the metrics:
+
+| Metric | Description |
+|--------|-------------|
+| `dns` | Time to resolve the hostname to an IP address via DNS.  Omitted if cached, or you specify an IP on the URL. |
+| `connect` | Time to connect to the remote socket (omitted if using Keep-Alives and reusing a host). |
+| `send` | Time to send the request data (typically for POST / PUT).  Also includes SSL handshake time (if HTTPS). |
+| `wait` | Time spent waiting for the server response (after request is sent). |
+| `receive` | Time spent downloading data from the server (after headers received). |
+| `decompress` | Time taken to decompress the response (if encoded with Gzip or Deflate). |
+| `total` | Total time of the entire HTTP transaction. |
+
+As indicated above, some of the properties may be omitted depending on the situation.  For example, if you are using a shared [http.Agent](https://nodejs.org/api/http.html#http_class_http_agent) with Keep-Alives, then subsequent requests to the same host won't perform a DNS lookup or socket connect, so those two metrics will be omitted.  Similarly, if the response from the server isn't compressed, then the `decompress` metric will be omitted.
+
+Note that the `send` metric includes the SSL / TLS handshake time, if using HTTPS.  Also, this metric may be `0` if using plain HTTP GET or HEAD, as it is mainly used to measure the POST or PUT data send time (i.e. uploading file data).
+
+See the [pixl-perf](https://www.npmjs.com/package/pixl-perf) module for more details.
+
+# DNS Caching
+
+You can optionally have the library cache DNS lookups in RAM, for faster subsequent requests on the same hostnames.  You can also specify the TTL (time to live) to control how long hostnames will be cached.  This means it will only request a DNS lookup for a given hostname once every N seconds.  To enable this feature, call `setDNSCache()` and specify the number of seconds for the TTL:
+
+```js
+request.setDNSCache( 300 ); // 5 minute TTL
+```
+
+This will cache hostnames and their IP addresses in RAM for 5 minutes.  Meaning, during that time subsequent requests to the same hostname will not require a DNS lookup.  After 5 minutes, the cache objects will expire, and the next request will perform another DNS lookup.
+
+Note that while the feature can be enabled or disabled per request object, the DNS cache itself is global.  Meaning, it is shared by all `pixl-request` objects in the same process.
+
+## Flushing the Cache
+
+To flush the DNS cache (i.e. eject all the IPs from it), call the `flushDNSCache()` method.  Example:
+
+```js
+request.flushDNSCache();
+```
+
+# SSL Certificate Validation
+
+If you are trying to connect to a host via HTTPS and getting certificate errors, you may have to bypass Node's SSL certification validation.  To do this, set the following environment variable before you make your HTTPS request:
+
+```js
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+```
+
+Please only do this if you understand the security ramifications, and *completely trust* the host you are connecting to, and the network you are on.  Skipping the certificate validation step should really only be done in special circumstances, such as testing your own internal server with a self-signed cert.
 
 # License
 
