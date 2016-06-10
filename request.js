@@ -16,6 +16,7 @@ var Perf = require('pixl-perf');
 var ErrNo = require('errno');
 
 var pixlreq_agent = "PixlRequest " + require('./package.json').version;
+var dns_cache = {};
 
 module.exports = Class.create({
 	
@@ -26,6 +27,9 @@ module.exports = Class.create({
 	
 	// do not follow redirects by default
 	defaultFollow: false,
+	
+	// do not cache DNS by default (TTL 0s)
+	dnsTTL: 0,
 	
 	__construct: function(useragent) {
 		// class constructor
@@ -54,6 +58,16 @@ module.exports = Class.create({
 		// override the default follow setting (boolean or int)
 		// specify integer to set limit of max redirects to allow
 		this.defaultFollow = follow;
+	},
+	
+	setDNSCache: function(ttl) {
+		// set a DNS cache TTL (seconds) or 0 to disable
+		this.dnsTTL = ttl;
+	},
+	
+	flushDNSCache: function() {
+		// remove all IPs from the internal DNS cache
+		dns_cache = {};
 	},
 	
 	json: function(url, data, options, callback) {
@@ -238,6 +252,21 @@ module.exports = Class.create({
 			}
 		}
 		
+		// possibly use dns cache
+		if (this.dnsTTL && dns_cache[options.hostname]) {
+			var now = (new Date()).getTime() / 1000;
+			var obj = dns_cache[options.hostname];
+			if (obj.expires > now) {
+				// cache is still fresh, swap in IP and add 'Host' header
+				options.headers['Host'] = options.hostname;
+				options.hostname = obj.ip;
+			}
+			else {
+				// cache object has expired
+				delete dns_cache[options.hostname];
+			}
+		} // dns cache
+		
 		// prep post data
 		var post_data = null;
 		var is_form = false;
@@ -390,6 +419,14 @@ module.exports = Class.create({
 			socket.on('lookup', function(err, address, family, hostname) {
 				// track DNS lookup time
 				perf.end('dns', perf.perf.total.start);
+				
+				// possibly cache IP for future lookups
+				if (self.dnsTTL) {
+					dns_cache[ options.hostname ] = {
+						ip: address,
+						expires: ((new Date()).getTime() / 1000) + self.dnsTTL
+					};
+				}
 			} );
 			
 			socket.on('connect', function() {
