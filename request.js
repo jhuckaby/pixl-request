@@ -12,6 +12,7 @@ var util = require('util');
 var FormData = require('form-data');
 var XML = require('pixl-xml');
 var Class = require('pixl-class');
+var Perf = require('pixl-perf');
 var ErrNo = require('errno');
 
 var pixlreq_agent = "PixlRequest " + require('./package.json').version;
@@ -73,19 +74,19 @@ module.exports = Class.create({
 			method = 'get';
 		}
 		
-		this[method]( url, options, function(err, res, data) {
+		this[method]( url, options, function(err, res, data, perf) {
 			// got response, check for http error
-			if (err) return callback( err );
+			if (err) return callback( err, null, null, perf );
 			
 			// parse json in response
 			var json = null;
 			try { json = JSON.parse( data.toString() ); }
 			catch (err) {
-				return callback( err );
+				return callback( err, null, null, perf );
 			}
 			
 			// all good, send json object back
-			callback( null, res, json );
+			callback( null, res, json, perf );
 		} );
 	},
 	
@@ -107,19 +108,19 @@ module.exports = Class.create({
 			method = 'get';
 		}
 		
-		this[method]( url, options, function(err, res, data) {
+		this[method]( url, options, function(err, res, data, perf) {
 			// got response, check for http error
-			if (err) return callback( err );
+			if (err) return callback( err, null, null, perf );
 			
 			// parse xml in response
 			var xml = null;
 			try { xml = XML.parse( data.toString() ); }
 			catch (err) {
-				return callback( err );
+				return callback( err, null, null, perf );
 			}
 			
 			// all good, send xml object back
-			callback( null, res, xml );
+			callback( null, res, xml, perf );
 		} );
 	},
 	
@@ -212,6 +213,10 @@ module.exports = Class.create({
 		var self = this;
 		if (!options) options = {};
 		
+		// setup perf
+		var perf = new Perf();
+		perf.begin();
+		
 		// if no agent is specified, use close connections
 		if (!('agent' in options)) {
 			options.agent = false;
@@ -293,6 +298,7 @@ module.exports = Class.create({
 		var proto_class = (parts.protocol == 'https:') ? https : http;
 		var req = proto_class.request( options, function(res) {
 			// got response headers
+			perf.end('wait', perf.perf.total.start);
 			
 			// check for auto-redirect
 			if (follow && res.statusCode.toString().match(/^(301|302|307|308)$/) && res.headers['location']) {
@@ -314,7 +320,8 @@ module.exports = Class.create({
 			if (download) {
 				// stream content to a pipe
 				download.on('finish', function() {
-					if (callback) callback( null, res, download );
+					perf.end('receive', perf.perf.total.start);
+					if (callback) callback( null, res, download, self.finishPerf(perf) );
 				} );
 				
 				if (res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i)) {
@@ -342,6 +349,8 @@ module.exports = Class.create({
 				
 				res.on('end', function() {
 					// end of response
+					perf.end('receive', perf.perf.total.start);
+					
 					// prepare data
 					if (total_bytes) {
 						var buf = Buffer.concat(chunks, total_bytes);
@@ -350,28 +359,50 @@ module.exports = Class.create({
 						if (res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i) && callback) {
 							// gunzip data first
 							zlib.gunzip( buf, function(err, data) {
-								callback( err, res, data );
+								perf.end('decompress', perf.perf.total.start);
+								callback( err, res, data, self.finishPerf(perf) );
 							} );
 						}
 						else if (res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bdeflate\b/i) && callback) {
 							// inflate data first
 							zlib.inflate( buf, function(err, data) {
-								callback( err, res, data );
+								perf.end('decompress', perf.perf.total.start);
+								callback( err, res, data, self.finishPerf(perf) );
 							} );
 						}
 						else {
 							// response content is not encoded
-							if (callback) callback( null, res, buf );
+							if (callback) callback( null, res, buf, self.finishPerf(perf) );
 						}
 					}
 					else {
 						// response content is empty
-						if (callback) callback( null, res, new Buffer(0) );
+						if (callback) callback( null, res, new Buffer(0), self.finishPerf(perf) );
 					}
 				} ); // end
 			} // buffer mode
 			
 		} ); // request
+		
+		req.on('socket', function(socket) {
+			// hook some socket events once we have a reference to it
+			
+			socket.on('lookup', function(err, address, family, hostname) {
+				// track DNS lookup time
+				perf.end('dns', perf.perf.total.start);
+			} );
+			
+			socket.on('connect', function() {
+				// track socket connect time
+				perf.end('connect', perf.perf.total.start);
+			} );
+			
+		} );
+		
+		req.on('finish', function() {
+			// track data send time (only really works for POST/PUT)
+			perf.end('send', perf.perf.total.start);
+		} );
 		
 		req.on('error', function(e) {
 			// handle socket errors
@@ -382,7 +413,7 @@ module.exports = Class.create({
 				else if (e.errno && ErrNo.code[e.errno]) {
 					msg = ucfirst(ErrNo.code[e.errno].description) + " (" + e.message + ")";
 				}
-				callback( new Error(msg) );
+				callback( new Error(msg), null, null, self.finishPerf(perf) );
 			}
 		} );
 		
@@ -391,7 +422,7 @@ module.exports = Class.create({
 			req.setTimeout( timeout, function() {
 				aborted = true;
 				req.abort();
-				if (callback) callback( new Error("Socket Timeout ("+timeout+" ms)") );
+				if (callback) callback( new Error("Socket Timeout ("+timeout+" ms)"), null, null, self.finishPerf(perf) );
 			} );
 		}
 		
@@ -404,6 +435,25 @@ module.exports = Class.create({
 			}
 		}
 		else req.end();
+	},
+	
+	finishPerf: function(perf) {
+		// finalize perf, adjust metrics and total
+		// order: dns, connect, send, wait, receive, decompress
+		var p = perf.perf;
+		
+		if (p.decompress && p.receive) p.decompress.elapsed -= p.receive.elapsed;
+		if (p.receive && p.wait) p.receive.elapsed -= p.wait.elapsed;
+		if (p.wait && p.send) p.wait.elapsed -= p.send.elapsed;
+		if (p.send && p.connect) p.send.elapsed -= p.connect.elapsed;
+		if (p.connect && p.dns) p.connect.elapsed -= p.dns.elapsed;
+		
+		for (var key in p) {
+			if (p[key].elapsed) p[key].elapsed = Math.max(0, p[key].elapsed);
+		}
+		
+		perf.end();
+		return perf;
 	}
 	
 });
