@@ -416,23 +416,27 @@ module.exports = Class.create({
 		req.on('socket', function(socket) {
 			// hook some socket events once we have a reference to it
 			
-			socket.on('lookup', function(err, address, family, hostname) {
-				// track DNS lookup time
-				perf.end('dns', perf.perf.total.start);
+			if (!socket._pixl_request_hooked) {
+				socket._pixl_request_hooked = true;
 				
-				// possibly cache IP for future lookups
-				if (self.dnsTTL) {
-					dns_cache[ options.hostname ] = {
-						ip: address,
-						expires: ((new Date()).getTime() / 1000) + self.dnsTTL
-					};
-				}
-			} );
-			
-			socket.on('connect', function() {
-				// track socket connect time
-				perf.end('connect', perf.perf.total.start);
-			} );
+				socket.on('lookup', function(err, address, family, hostname) {
+					// track DNS lookup time
+					perf.end('dns', perf.perf.total.start);
+					
+					// possibly cache IP for future lookups
+					if (self.dnsTTL) {
+						dns_cache[ options.hostname ] = {
+							ip: address,
+							expires: ((new Date()).getTime() / 1000) + self.dnsTTL
+						};
+					}
+				} );
+				
+				socket.on('connect', function() {
+					// track socket connect time
+					perf.end('connect', perf.perf.total.start);
+				} );
+			} // hooked
 			
 		} );
 		
