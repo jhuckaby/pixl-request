@@ -225,6 +225,8 @@ module.exports = Class.create({
 		// low-level request sender
 		// callback will receive: err, res, data
 		var self = this;
+		var callback_fired = false;
+		var timer = null;
 		if (!options) options = {};
 		
 		// setup perf
@@ -312,11 +314,13 @@ module.exports = Class.create({
 			if (typeof(download) == 'string') {
 				try { download = fs.createWriteStream(download); }
 				catch (err) {
-					if (callback) callback(err);
+					if (timer) { clearTimeout(timer); timer = null; }
+					if (callback && !callback_fired) { callback_fired = true; callback(err); }
 					return;
 				}
 				download.on('error', function(err) {
-					if (callback) callback(err);
+					if (timer) { clearTimeout(timer); timer = null; }
+					if (callback && !callback_fired) { callback_fired = true; callback(err); }
 					return;
 				});
 			}
@@ -328,6 +332,9 @@ module.exports = Class.create({
 		var req = proto_class.request( options, function(res) {
 			// got response headers
 			perf.end('wait', perf.perf.total.start);
+			
+			// clear initial timeout (first byte received)
+			if (timer) { clearTimeout(timer); timer = null; }
 			
 			// check for auto-redirect
 			if (follow && res.statusCode.toString().match(/^(301|302|307|308)$/) && res.headers['location']) {
@@ -350,7 +357,10 @@ module.exports = Class.create({
 				// stream content to a pipe
 				download.on('finish', function() {
 					perf.end('receive', perf.perf.total.start);
-					if (callback) callback( null, res, download, self.finishPerf(perf) );
+					if (callback && !callback_fired) {
+						callback_fired = true;
+						callback( null, res, download, self.finishPerf(perf) );
+					}
 				} );
 				
 				if (res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i)) {
@@ -389,24 +399,36 @@ module.exports = Class.create({
 							// gunzip data first
 							zlib.gunzip( buf, function(err, data) {
 								perf.end('decompress', perf.perf.total.start);
-								callback( err, res, data, self.finishPerf(perf) );
+								if (!callback_fired) {
+									callback_fired = true;
+									callback( err, res, data, self.finishPerf(perf) );
+								}
 							} );
 						}
 						else if (res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bdeflate\b/i) && callback) {
 							// inflate data first
 							zlib.inflate( buf, function(err, data) {
 								perf.end('decompress', perf.perf.total.start);
-								callback( err, res, data, self.finishPerf(perf) );
+								if (!callback_fired) {
+									callback_fired = true;
+									callback( err, res, data, self.finishPerf(perf) );
+								}
 							} );
 						}
 						else {
 							// response content is not encoded
-							if (callback) callback( null, res, buf, self.finishPerf(perf) );
+							if (callback && !callback_fired) {
+								callback_fired = true;
+								callback( null, res, buf, self.finishPerf(perf) );
+							}
 						}
 					}
 					else {
 						// response content is empty
-						if (callback) callback( null, res, new Buffer(0), self.finishPerf(perf) );
+						if (callback && !callback_fired) {
+							callback_fired = true;
+							callback( null, res, new Buffer(0), self.finishPerf(perf) );
+						}
 					}
 				} ); // end
 			} // buffer mode
@@ -436,9 +458,23 @@ module.exports = Class.create({
 					// track socket connect time
 					perf.end('connect', perf.perf.total.start);
 				} );
-			} // hooked
+				
+				if (timeout) {
+					// idle timeout on socket
+					socket.setTimeout( timeout, function() {
+						if (!aborted) {
+							aborted = true;
+							req.abort();
+							if (callback && !callback_fired) {
+								callback_fired = true;
+								callback( new Error("Socket Timeout ("+timeout+" ms)"), null, null, self.finishPerf(perf) );
+							}
+						}
+					} );
+				}
+			} // not hooked
 			
-		} );
+		} ); // socket
 		
 		req.on('finish', function() {
 			// track data send time (only really works for POST/PUT)
@@ -454,17 +490,27 @@ module.exports = Class.create({
 				else if (e.errno && ErrNo.code[e.errno]) {
 					msg = ucfirst(ErrNo.code[e.errno].description) + " (" + e.message + ")";
 				}
-				callback( new Error(msg), null, null, self.finishPerf(perf) );
+				if (timer) { clearTimeout(timer); timer = null; }
+				if (!callback_fired) {
+					callback_fired = true;
+					callback( new Error(msg), null, null, self.finishPerf(perf) );
+				}
 			}
 		} );
 		
 		if (timeout) {
-			// set socket idle timeout which aborts the request
-			req.setTimeout( timeout, function() {
-				aborted = true;
-				req.abort();
-				if (callback) callback( new Error("Socket Timeout ("+timeout+" ms)"), null, null, self.finishPerf(perf) );
-			} );
+			// set initial socket timeout which aborts the request
+			// this is cleared at first byte, then we rely on the socket idle timeout
+			timer = setTimeout( function() {
+				if (!aborted) {
+					aborted = true;
+					req.abort();
+					if (callback && !callback_fired) {
+						callback_fired = true;
+						callback( new Error("Socket Timeout ("+timeout+" ms)"), null, null, self.finishPerf(perf) );
+					}
+				}
+			}, timeout );
 		}
 		
 		if (post_data !== null) {
