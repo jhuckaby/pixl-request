@@ -223,11 +223,17 @@ module.exports = Class.create({
 	
 	request: function(url, options, callback) {
 		// low-level request sender
-		// callback will receive: err, res, data
+		// callback will receive: err, res, data, perf
 		var self = this;
 		var callback_fired = false;
 		var timer = null;
 		if (!options) options = {};
+		else {
+			// make shallow copy of options so we don't clobber user's version
+			var new_opts = {};
+			for (var key in options) new_opts[key] = options[key];
+			options = new_opts;
+		}
 		
 		// setup perf
 		var perf = new Perf();
