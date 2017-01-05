@@ -18,6 +18,9 @@ var ErrNo = require('errno');
 var pixlreq_agent = "PixlRequest " + require('./package.json').version;
 var dns_cache = {};
 
+// util.isArray is DEPRECATED??? Nooooooooode!
+var isArray = Array.isArray || util.isArray;
+
 module.exports = Class.create({
 	
 	defaultHeaders: null,
@@ -160,17 +163,31 @@ module.exports = Class.create({
 		
 		options.method = 'POST';
 		
-		if (typeof(options.data) == 'object') {
+		// see if we have a buffer, string or other
+		var is_buffer = (options.data instanceof Buffer);
+		var is_string = (typeof(options.data) == 'string');
+		
+		// if string, convert to buffer so content length is correct (unicode)
+		if (is_string) {
+			// support Node v0.12 and up
+			options.data = Buffer.from ? Buffer.from(options.data) : (new Buffer(options.data));
+			is_buffer = true;
+			is_string = false;
+		}
+		
+		if ((typeof(options.data) == 'object') && !is_buffer) {
 			// serialize data into key/value pairs
 			if (options.json) {
 				// JSON REST
 				options.data = JSON.stringify(options.data) + "\n";
+				options.data = Buffer.from ? Buffer.from(options.data) : (new Buffer(options.data));
 				options.headers['Content-Type'] = 'application/json';
 				delete options.json;
 			}
 			else if (options.xml) {
 				// XML REST
 				options.data = XML.stringify(options.data, options.xmlRootNode || 'Request') + "\n";
+				options.data = Buffer.from ? Buffer.from(options.data) : (new Buffer(options.data));
 				options.headers['Content-Type'] = 'text/xml';
 				delete options.xml;
 				delete options.xmlRootNode;
@@ -192,7 +209,7 @@ module.exports = Class.create({
 							// simple file path, convert to readable stream
 							form.append( key, fs.createReadStream(file) );
 						}
-						else if (util.isArray(file)) {
+						else if (isArray(file)) {
 							// array of [file path or stream or buffer, filename]
 							var file_data = file[0];
 							if (typeof(file_data) == 'string') file_data = fs.createReadStream(file_data);
@@ -214,6 +231,7 @@ module.exports = Class.create({
 			else {
 				// form urlencoded
 				options.data = querystring.stringify(options.data);
+				options.data = Buffer.from ? Buffer.from(options.data) : (new Buffer(options.data));
 				options.headers['Content-Type'] = 'application/x-www-form-urlencoded';
 			}
 		} // serialize data
