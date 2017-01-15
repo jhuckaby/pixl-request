@@ -465,6 +465,9 @@ module.exports = Class.create({
 			if (!socket._pixl_request_hooked) {
 				socket._pixl_request_hooked = true;
 				
+				// Disable the Nagle algorithm.
+				socket.setNoDelay( true );
+				
 				socket.on('lookup', function(err, address, family, hostname) {
 					// track DNS lookup time
 					perf.end('dns', perf.perf.total.start);
