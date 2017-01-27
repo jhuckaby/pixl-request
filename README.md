@@ -52,7 +52,7 @@ Here are all the methods available in the request library:
 | [json()](#json-rest-api) | Sends a request to a JSON REST API endpoint and parses the response. |
 | [xml()](#xml-rest-api) | Sends a request to an XML REST API endpoint and parses the response. |
 | [setHeader()](#default-headers) | Overrides or adds a default header for future requests. |
-| [setTimeout()](#handling-timeouts) | Overrides the default socket idle timeout (milliseconds). |
+| [setTimeout()](#handling-timeouts) | Overrides the default socket timeout (milliseconds). |
 | [setFollow()](#automatic-redirects) | Overrides the default behavior for following redirects. |
 | [setDNSCache()](#dns-caching) | Enable DNS caching and set the TTL in seconds. |
 | [flushDNSCache()](#flushing-the-cache) | Flush all IPs from the internal DNS cache. |
@@ -454,7 +454,9 @@ request.defaultHeaders = {
 
 # Handling Timeouts
 
-The default socket idle timeout for all requests is 30 seconds.  You can customize this per request by including a `timeout` property with your options object, and setting it to the number of milliseconds you want:
+PixlRequest handles timeouts by measuring the "time to first byte", from the start of the request.  This is *not* an idle timeout, and *not* a connect timeout.  It is simply the maximum amount of time allowed from the start of the request, to the first byte received.  The Node.js [socket.setTimeout()](https://nodejs.org/api/net.html#net_socket_settimeout_timeout_callback) method is not used, because we have found it to be totally unreliable, especially with Keep-Alives.
+
+The default socket timeout for all requests is 30 seconds.  You can customize this per request by including a `timeout` property with your options object, and setting it to the number of milliseconds you want:
 
 ```javascript
 request.post( 'http://myserver.com/api/post', {
@@ -477,7 +479,7 @@ Or by resetting the default on your class instance, using the `setTimeout()` met
 request.setTimeout( 10 * 1000 ); // 10 seconds
 ```
 
-When a timeout occurs, an `error` event is emitted.  The error message will follow this syntax: `Socket Timeout (### ms)`.
+When a timeout occurs, an `error` event is emitted.  The error message will follow this syntax: `Socket Timeout (### ms)`.  Note that a socket timeout results in the socket being destroyed ([request.abort()](https://nodejs.org/api/http.html#http_request_abort) is called on the request object, which in turn destroys the socket).
 
 # Automatic Redirects
 

@@ -373,6 +373,7 @@ module.exports = Class.create({
 				delete options.auth;
 				
 				// recurse into self for redirect
+				callback_fired = true; // prevent firing twice
 				self.request( res.headers['location'], options, callback );
 				return;
 			}
@@ -486,21 +487,7 @@ module.exports = Class.create({
 					perf.end('connect', perf.perf.total.start);
 				} );
 				
-				if (timeout) {
-					// idle timeout on socket
-					socket.setTimeout( timeout, function() {
-						if (!aborted) {
-							aborted = true;
-							req.abort();
-							if (callback && !callback_fired) {
-								callback_fired = true;
-								callback( new Error("Socket Timeout ("+timeout+" ms)"), null, null, self.finishPerf(perf) );
-							}
-						}
-					} );
-				}
 			} // not hooked
-			
 		} ); // socket
 		
 		req.on('finish', function() {
