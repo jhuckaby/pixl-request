@@ -34,6 +34,9 @@ module.exports = Class.create({
 	// do not cache DNS by default (TTL 0s)
 	dnsTTL: 0,
 	
+	// http code success match for json/xml wrappers
+	successMatch: /^2\d\d$/,
+	
 	__construct: function(useragent) {
 		// class constructor
 		this.defaultHeaders = {
@@ -73,8 +76,15 @@ module.exports = Class.create({
 		dns_cache = {};
 	},
 	
+	setSuccessMatch: function(regexp) {
+		// set success match for http code (json/xml wrappers)
+		this.successMatch = regexp;
+	},
+	
 	json: function(url, data, options, callback) {
 		// convenience method: get or post json, get json back
+		var self = this;
+		
 		if (!callback) {
 			// support 3-arg calling convention
 			callback = options;
@@ -92,8 +102,15 @@ module.exports = Class.create({
 		}
 		
 		this[method]( url, options, function(err, res, data, perf) {
-			// got response, check for http error
+			// got response, check for dns/tcp error
 			if (err) return callback( err, null, null, perf );
+			
+			// check for http error code
+			if (!res.statusCode.toString().match(self.successMatch)) {
+				err = new Error( "HTTP " + res.statusCode + " " + res.statusMessage );
+				err.code = res.statusCode;
+				return callback( err, res, data, perf );
+			}
 			
 			// parse json in response
 			var json = null;
@@ -109,6 +126,8 @@ module.exports = Class.create({
 	
 	xml: function(url, data, options, callback) {
 		// convenience method: get or post xml, get xml back
+		var self = this;
+		
 		if (!callback) {
 			// support 3-arg calling convention
 			callback = options;
@@ -126,8 +145,15 @@ module.exports = Class.create({
 		}
 		
 		this[method]( url, options, function(err, res, data, perf) {
-			// got response, check for http error
+			// got response, check for dns/tcp error
 			if (err) return callback( err, null, null, perf );
+			
+			// check for http error code
+			if (!res.statusCode.toString().match(self.successMatch)) {
+				err = new Error( "HTTP " + res.statusCode + " " + res.statusMessage );
+				err.code = res.statusCode;
+				return callback( err, res, data, perf );
+			}
 			
 			// parse xml in response
 			var xml = null;
