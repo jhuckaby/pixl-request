@@ -127,7 +127,7 @@ request.post( 'http://myserver.com/api/post', {
 function(err, resp, data) {
 	if (err) console.log("ERROR: " + err);
 	console.log("Status: " + resp.statusCode + ' ' + resp.statusMessage);
-	console.log("Headers: ", resp.headers));
+	console.log("Headers: ", resp.headers);
 	console.log("Content: " + data);
 } );
 ```
@@ -157,7 +157,7 @@ request.post( 'http://myserver.com/api/post', {
 function(err, resp, data) {
 	if (err) console.log("ERROR: " + err);
 	console.log("Status: " + resp.statusCode + ' ' + resp.statusMessage);
-	console.log("Headers: ", resp.headers));
+	console.log("Headers: ", resp.headers);
 	console.log("Content: " + data);
 } );
 ```
