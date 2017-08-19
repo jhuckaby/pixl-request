@@ -532,17 +532,21 @@ This would output something like the following:
 
 ```
 Status: 200 OK
-Performance: {
+Performance: { 
   scale: 1000,
   perf: { 
-     total: 315.508,
-     dns: 100.068,
-     connect: 42.597,
-     send: 118.563,
-     wait: 45.585,
-     receive: 3.017,
-     decompress: 3.929 
-   }
+     total: 548.556,
+     dns: 25.451,
+     connect: 120.155,
+     send: 270.92,
+     wait: 122.2,
+     receive: 3.462,
+     decompress: 4.321 
+  },
+  counters: { 
+    bytes_sent: 134, 
+    bytes_received: 749 
+  } 
 }
 ```
 
@@ -561,6 +565,8 @@ All the `perf` values are in milliseconds (represented by the `scale`).  Here ar
 As indicated above, some of the properties may be omitted depending on the situation.  For example, if you are using a shared [http.Agent](https://nodejs.org/api/http.html#http_class_http_agent) with Keep-Alives, then subsequent requests to the same host won't perform a DNS lookup or socket connect, so those two metrics will be omitted.  Similarly, if the response from the server isn't compressed, then the `decompress` metric will be omitted.
 
 Note that the `send` metric includes the SSL / TLS handshake time, if using HTTPS.  Also, this metric may be `0` if using plain HTTP GET or HEAD, as it is mainly used to measure the POST or PUT data send time (i.e. uploading file data).
+
+The `bytes_sent` and `bytes_received` values in the `counters` object represent the total amount of raw bytes sent and received over the socket.  This includes the raw request line and request/response headers.
 
 See the [pixl-perf](https://www.npmjs.com/package/pixl-perf) module for more details.
 

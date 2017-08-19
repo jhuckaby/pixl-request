@@ -183,6 +183,7 @@ module.exports = Class.create({
 	post: function(url, options, callback) {
 		// perform HTTP POST, raw data or key/value pairs
 		// callback will receive: err, res, data
+		var key;
 		if (!options) options = {};
 		if (!options.headers) options.headers = {};
 		if (!options.data) options.data = '';
@@ -223,13 +224,13 @@ module.exports = Class.create({
 				var form = new FormData();
 				
 				// POST params (strings or Buffers)
-				for (var key in options.data) {
+				for (key in options.data) {
 					form.append(key, options.data[key]);
 				}
 				
 				// file uploads
 				if (options.files) {
-					for (var key in options.files) {
+					for (key in options.files) {
 						var file = options.files[key];
 						if (typeof(file) == 'string') {
 							// simple file path, convert to readable stream
@@ -271,11 +272,12 @@ module.exports = Class.create({
 		var self = this;
 		var callback_fired = false;
 		var timer = null;
+		var key;
 		if (!options) options = {};
 		else {
 			// make shallow copy of options so we don't clobber user's version
 			var new_opts = {};
-			for (var key in options) new_opts[key] = options[key];
+			for (key in options) new_opts[key] = options[key];
 			options = new_opts;
 		}
 		
@@ -298,7 +300,7 @@ module.exports = Class.create({
 		
 		// default headers
 		if (!options.headers) options.headers = {};
-		for (var key in this.defaultHeaders) {
+		for (key in this.defaultHeaders) {
 			if (!(key in options.headers)) {
 				options.headers[key] = this.defaultHeaders[key];
 			}
@@ -332,7 +334,7 @@ module.exports = Class.create({
 				// allow form-data to populate headers (multipart boundary, etc.)
 				is_form = true;
 				var form_headers = post_data.getHeaders();
-				for (var key in form_headers) {
+				for (key in form_headers) {
 					options.headers[key] = form_headers[key];
 				}
 			}
@@ -440,6 +442,10 @@ module.exports = Class.create({
 				res.on('end', function() {
 					// end of response
 					perf.end('receive', perf.perf.total.start);
+					perf.count('bytes_sent', (res.socket.bytesWritten || 0) - (res.socket._pixl_orig_bytes_written || 0));
+					perf.count('bytes_received', (res.socket.bytesRead || 0) - (res.socket._pixl_orig_bytes_read || 0));
+					res.socket._pixl_orig_bytes_written = res.socket.bytesWritten || 0;
+					res.socket._pixl_orig_bytes_read = res.socket.bytesRead || 0;
 					
 					// prepare data
 					if (total_bytes) {
@@ -488,7 +494,6 @@ module.exports = Class.create({
 		
 		req.on('socket', function(socket) {
 			// hook some socket events once we have a reference to it
-			
 			if (!socket._pixl_request_hooked) {
 				socket._pixl_request_hooked = true;
 				
