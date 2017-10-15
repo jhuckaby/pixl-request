@@ -37,6 +37,9 @@ module.exports = Class.create({
 	// http code success match for json/xml wrappers
 	successMatch: /^2\d\d$/,
 	
+	// automatically decompress gzip/inflate compression on response
+	autoDecompress: true,
+	
 	__construct: function(useragent) {
 		// class constructor
 		this.defaultHeaders = {
@@ -79,6 +82,11 @@ module.exports = Class.create({
 	setSuccessMatch: function(regexp) {
 		// set success match for http code (json/xml wrappers)
 		this.successMatch = regexp;
+	},
+	
+	setAutoDecompress: function(enabled) {
+		// set auto decompress (boolean: enabled/disabled)
+		this.autoDecompress = enabled;
 	},
 	
 	json: function(url, data, options, callback) {
@@ -177,6 +185,19 @@ module.exports = Class.create({
 		}
 		if (!options) options = {};
 		options.method = 'GET';
+		this.request( url, options, callback );
+	},
+	
+	head: function(url, options, callback) {
+		// perform HTTP HEAD
+		// callback will receive: err, res, data
+		if (!callback) {
+			// support two-argument calling convention: url and callback
+			callback = options;
+			options = {};
+		}
+		if (!options) options = {};
+		options.method = 'HEAD';
 		this.request( url, options, callback );
 	},
 	
@@ -361,6 +382,8 @@ module.exports = Class.create({
 		
 		// stream mode
 		var download = null;
+		var pre_download = null;
+		
 		if ('download' in options) {
 			download = options.download;
 			if (typeof(download) == 'string') {
@@ -378,6 +401,11 @@ module.exports = Class.create({
 			}
 			delete options.download;
 		}
+		if ('pre_download' in options) {
+			// special callback to handle raw stream
+			pre_download = options.pre_download;
+			delete options.pre_download;
+		}
 		
 		// construct request object
 		var proto_class = (parts.protocol == 'https:') ? https : http;
@@ -394,6 +422,7 @@ module.exports = Class.create({
 				options.timeout = timeout;
 				options.follow = (typeof(follow) == 'number') ? (follow - 1) : follow;
 				options.download = download;
+				options.pre_download = pre_download;
 				
 				delete options.hostname;
 				delete options.port;
@@ -416,11 +445,19 @@ module.exports = Class.create({
 					}
 				} );
 				
-				if (res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i)) {
+				if (pre_download) {
+					// special callback to handle raw stream externally
+					if (pre_download( null, res, download ) === false) {
+						// special pre-abort error case, switch to buffer mode
+						download.removeAllListeners('finish');
+						download = null;
+					}
+				}
+				else if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i)) {
 					// gunzip stream
 					res.pipe( zlib.createGunzip() ).pipe( download );
 				}
-				else if (res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bdeflate\b/i)) {
+				else if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bdeflate\b/i)) {
 					// inflate stream
 					res.pipe( zlib.createInflate() ).pipe( download );
 				}
@@ -429,7 +466,8 @@ module.exports = Class.create({
 					res.pipe( download );
 				}
 			} // stream mode
-			else {
+			
+			if (!download) {
 				var chunks = [];
 				var total_bytes = 0;
 				
@@ -452,7 +490,7 @@ module.exports = Class.create({
 						var buf = Buffer.concat(chunks, total_bytes);
 						
 						// check for gzip encoding
-						if (res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i) && callback) {
+						if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i) && callback) {
 							// gunzip data first
 							zlib.gunzip( buf, function(err, data) {
 								perf.end('decompress', perf.perf.total.start);
@@ -462,7 +500,7 @@ module.exports = Class.create({
 								}
 							} );
 						}
-						else if (res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bdeflate\b/i) && callback) {
+						else if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bdeflate\b/i) && callback) {
 							// inflate data first
 							zlib.inflate( buf, function(err, data) {
 								perf.end('decompress', perf.perf.total.start);

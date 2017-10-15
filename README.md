@@ -54,6 +54,7 @@ Here are all the methods available in the request library:
 | [setHeader()](#default-headers) | Overrides or adds a default header for future requests. |
 | [setTimeout()](#handling-timeouts) | Overrides the default socket timeout (milliseconds). |
 | [setFollow()](#automatic-redirects) | Overrides the default behavior for following redirects. |
+| [setAutoDecompress()](#compressed-responses) | Overrides the default behavior of decompressing responses. |
 | [setDNSCache()](#dns-caching) | Enable DNS caching and set the TTL in seconds. |
 | [flushDNSCache()](#flushing-the-cache) | Flush all IPs from the internal DNS cache. |
 
@@ -250,7 +251,7 @@ Your callback will only be invoked when the file is *completely* downloaded and 
 Alternatively, if you already have an open stream object, you can pass that to the `download` property.  Example:
 
 ```js
-var stream = fs.createWriteStream( '/var/tmp/myimage.jpg', { flags: 'w' } );
+var stream = fs.createWriteStream( '/var/tmp/myimage.jpg' );
 
 request.get( 'https://upload.wikimedia.org/wikipedia/commons/9/9b/Gustav_chocolate.jpg', {
 	download: stream
@@ -263,6 +264,32 @@ function(err, resp) {
 	}
 } );
 ```
+
+### Advanced Stream Control
+
+If you need more control over the response stream, you can provide a `pre_download` property in your `options` object, passed to either `get()` or `post()`.  Set this property to a callback function, which will be called *before* the data is downloaded, but *after* the HTTP response headers are parsed.  This allows you to essentially intercept the response and set up your own stream pipe.  Example:
+
+```js
+var stream = fs.createWriteStream( '/var/tmp/myimage.jpg' );
+
+request.get( 'https://upload.wikimedia.org/wikipedia/commons/9/9b/Gustav_chocolate.jpg', {
+	download: stream,
+	pre_download: function(err, resp) {
+		// setup stream pipe ourselves
+		resp.pipe( stream );
+		return true;
+	}
+}, 
+function(err, resp, data) {
+	if (err) console.log("ERROR: " + err);
+	else {
+		console.log("Status: " + resp.statusCode + " " + resp.statusMessage);
+		console.log("Headers: ", resp.headers);
+	}
+} );
+```
+
+Your `pre_download` function can optionally return `false`, which will inform the library that you did not set up a stream pipe, and it should fire the original callback with a data buffer instead.
 
 ## Keep-Alives
 
@@ -512,7 +539,13 @@ The library recognizes HTTP codes 301, 302, 307 and 308 as "redirect" responses,
 
 # Compressed Responses
 
-The request library automatically handles Gzip-encoded responses that come back from the remote server.  These are transparently decoded for you.  However, you should know that by default all outgoing requests include an `Accept-Encoding: gzip, deflate` header, which broadcasts our support for it.  If you do not want responses to be compressed, you can unset this header.  See the [Default Headers](#default-headers) section above.
+The request library automatically handles Gzip and Deflate encoded responses that come back from the remote server.  These are transparently decoded for you.  However, you should know that by default all outgoing requests include an `Accept-Encoding: gzip, deflate` header, which broadcasts our support for it.  If you do not want responses to be compressed, you can unset this header.  See the [Default Headers](#default-headers) section above.
+
+Alternately, if you would prefer that the library not do anything regarding compression, and pass the compressed response directly through without touching it, call the `setAutoDecompress()` method, and pass in `false`:
+
+```js
+request.setAutoDecompress( false );
+```
 
 # Performance Metrics
 
