@@ -2,6 +2,31 @@
 
 This module is a very simple wrapper around Node's built-in [http](https://nodejs.org/api/http.html) library for making HTTP requests.  It provides an easy way to send an HTTP GET or POST, including things like support for HTTPS (SSL), file uploads and JSON REST style API calls.  Gzip-encoded responses are also handled automatically.
 
+# Table of Contents
+
+- [Overview](#overview)
+- [Usage](#usage)
+- [Method List](#method-list)
+- [Request Types](#request-types)
+	* [HTTP GET](#http-get)
+	* [HTTP POST](#http-post)
+	* [Multipart POST](#multipart-post)
+	* [File Uploads](#file-uploads)
+	* [File Downloads](#file-downloads)
+		+ [Advanced Stream Control](#advanced-stream-control)
+	* [Keep-Alives](#keep-alives)
+	* [JSON REST API](#json-rest-api)
+	* [XML REST API](#xml-rest-api)
+- [Default Headers](#default-headers)
+- [Handling Timeouts](#handling-timeouts)
+- [Automatic Redirects](#automatic-redirects)
+- [Compressed Responses](#compressed-responses)
+- [Performance Metrics](#performance-metrics)
+- [DNS Caching](#dns-caching)
+	* [Flushing the Cache](#flushing-the-cache)
+- [SSL Certificate Validation](#ssl-certificate-validation)
+- [License](#license)
+
 # Usage
 
 Use [npm](https://www.npmjs.com/) to install the module:
