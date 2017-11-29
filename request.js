@@ -407,6 +407,11 @@ module.exports = Class.create({
 			delete options.pre_download;
 		}
 		
+		// prevent bad characters in headers, which can crash node's writeHead() call
+		for (var key in options.headers) {
+			options.headers[key] = options.headers[key].toString().replace(/([\x80-\xFF\x00-\x1F\u00FF-\uFFFF])/g, '');
+		}
+		
 		// construct request object
 		var proto_class = (parts.protocol == 'https:') ? https : http;
 		var req = proto_class.request( options, function(res) {
