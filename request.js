@@ -21,6 +21,10 @@ var dns_cache = {};
 // util.isArray is DEPRECATED??? Nooooooooode!
 var isArray = Array.isArray || util.isArray;
 
+var http_common = require('_http_common');
+var checkIsHttpToken = http_common._checkIsHttpToken;
+var checkInvalidHeaderChar = http_common._checkInvalidHeaderChar;
+
 module.exports = Class.create({
 	
 	defaultHeaders: null,
@@ -407,9 +411,16 @@ module.exports = Class.create({
 			delete options.pre_download;
 		}
 		
-		// prevent bad characters in headers, which can crash node's writeHead() call
+		// reject bad characters in headers, which can crash node's writeHead() call
 		for (var key in options.headers) {
-			options.headers[key] = options.headers[key].toString().replace(/([\x80-\xFF\x00-\x1F\u00FF-\uFFFF])/g, '');
+			if (!checkIsHttpToken(key)) {
+				callback_fired = true;
+				return callback( new Error("Invalid characters in header name: " + key) );
+			}
+			if (checkInvalidHeaderChar(options.headers[key])) {
+				callback_fired = true;
+				return callback( new Error("Invalid characters in header value: " + key + ": " + options.headers[key]) );
+			}
 		}
 		
 		// construct request object
