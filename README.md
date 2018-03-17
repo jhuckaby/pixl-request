@@ -168,6 +168,27 @@ Check out the Node [http.request](https://nodejs.org/api/http.html#http_http_req
 
 By default, connections are closed at the end of each request.  If you want to reuse a persistent connection across multiple requests, see the [Keep-Alives](#keep-alives) section below.
 
+## Pure Data POST
+
+To specify your own raw POST data without any key/value pre-formatting, simply pass a `Buffer` object as the `data` property value, then include your own `Content-Type` header in the `headers` object.  Example:
+
+```js
+var buf = Buffer.from("VGhpcyBpcyBhIHRlc3QhIPCfmJw=", "base64");
+
+request.post( 'http://myserver.com/api/post', {
+	data: buf,
+	headers: {
+		'Content-Type': "application/octet-stream"
+	}
+}, 
+function(err, resp, data) {
+	if (err) console.log("ERROR: " + err);
+	console.log("Status: " + resp.statusCode + ' ' + resp.statusMessage);
+	console.log("Headers: ", resp.headers);
+	console.log("Content: " + data);
+} );
+```
+
 ## Multipart POST
 
 For a `multipart/form-data` post, which is typically better for binary data, all you need to do is pass in a `multipart` property in your options object, and set it to a true value.  Everything else is the same as a standard [HTTP POST](#http-post):
@@ -176,7 +197,7 @@ For a `multipart/form-data` post, which is typically better for binary data, all
 request.post( 'http://myserver.com/api/post', {
 	multipart: true, // activate multipart/form-data
 	data: {
-		foo: new Buffer("Joe was here!"), 
+		foo: Buffer.from("Joe was here!"), 
 		bar: 54321
 	}
 }, 
@@ -239,7 +260,7 @@ request.post( 'http://myserver.com/api/post', {
 		file1: '/images/SillyKitten1.jpg'
 	},
 	data: {
-		foo: new Buffer("Joe was here!"), 
+		foo: Buffer.from("Joe was here!"), 
 		bar: 54321
 	},
 	headers: {
