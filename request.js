@@ -222,7 +222,7 @@ module.exports = Class.create({
 		// if string, convert to buffer so content length is correct (unicode)
 		if (is_string) {
 			// support Node v0.12 and up
-			options.data = Buffer.from ? Buffer.from(options.data) : (new Buffer(options.data));
+			options.data = Buffer.from(options.data);
 			is_buffer = true;
 			is_string = false;
 		}
@@ -232,14 +232,14 @@ module.exports = Class.create({
 			if (options.json) {
 				// JSON REST
 				options.data = JSON.stringify(options.data) + "\n";
-				options.data = Buffer.from ? Buffer.from(options.data) : (new Buffer(options.data));
+				options.data = Buffer.from(options.data);
 				options.headers['Content-Type'] = 'application/json';
 				delete options.json;
 			}
 			else if (options.xml) {
 				// XML REST
 				options.data = XML.stringify(options.data, options.xmlRootNode || 'Request') + "\n";
-				options.data = Buffer.from ? Buffer.from(options.data) : (new Buffer(options.data));
+				options.data = Buffer.from(options.data);
 				options.headers['Content-Type'] = 'text/xml';
 				delete options.xml;
 				delete options.xmlRootNode;
@@ -283,7 +283,7 @@ module.exports = Class.create({
 			else {
 				// form urlencoded
 				options.data = querystring.stringify(options.data);
-				options.data = Buffer.from ? Buffer.from(options.data) : (new Buffer(options.data));
+				options.data = Buffer.from(options.data);
 				options.headers['Content-Type'] = 'application/x-www-form-urlencoded';
 			}
 		} // serialize data
@@ -538,7 +538,7 @@ module.exports = Class.create({
 						// response content is empty
 						if (callback && !callback_fired) {
 							callback_fired = true;
-							callback( null, res, new Buffer(0), self.finishPerf(perf) );
+							callback( null, res, Buffer.alloc(0), self.finishPerf(perf) );
 						}
 					}
 				} ); // end
