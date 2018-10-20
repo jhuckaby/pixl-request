@@ -1,5 +1,5 @@
 // Very simple HTTP request library for Node.js
-// Copyright (c) 2015 - 2016 Joseph Huckaby
+// Copyright (c) 2015 - 2018 Joseph Huckaby
 // Released under the MIT License
 
 var fs = require('fs');
@@ -43,6 +43,12 @@ module.exports = Class.create({
 	
 	// automatically decompress gzip/inflate compression on response
 	autoDecompress: true,
+	
+	// generate errors if response code doesn't match successMatch
+	autoError: false,
+	
+	// use pooled http/https agents for keep-alive connections
+	autoAgent: false,
 	
 	__construct: function(useragent) {
 		// class constructor
@@ -91,6 +97,27 @@ module.exports = Class.create({
 	setAutoDecompress: function(enabled) {
 		// set auto decompress (boolean: enabled/disabled)
 		this.autoDecompress = enabled;
+	},
+	
+	setAutoError: function(enabled) {
+		// set auto error mode (based on successMatch)
+		this.autoError = enabled;
+	},
+	
+	setKeepAlive: function(enabled, opts) {
+		// set auto agent mode
+		if (enabled && !this.autoAgent) {
+			if (!opts) opts = { keepAlive: true };
+			this.autoAgent = {
+				http: new http.Agent(opts),
+				https: new https.Agent(opts)
+			};
+		}
+		else if (!enabled && this.autoAgent) {
+			this.autoAgent.http.destroy();
+			this.autoAgent.https.destroy();
+			this.autoAgent = false;
+		}
 	},
 	
 	json: function(url, data, options, callback) {
@@ -310,18 +337,22 @@ module.exports = Class.create({
 		var perf = new Perf();
 		perf.begin();
 		
-		// if no agent is specified, use close connections
-		if (!('agent' in options)) {
-			options.agent = false;
-			options.keepAlive = false;
-		}
-		
 		// parse url into parts
 		var parts = require('url').parse(url);
 		if (!options.hostname) options.hostname = parts.hostname;
 		if (!options.port) options.port = parts.port || ((parts.protocol == 'https:') ? 443 : 80);
 		if (!options.path) options.path = parts.path;
 		if (!options.auth && parts.auth) options.auth = parts.auth;
+		
+		// optionally use auto agents
+		// if no agent is specified, use close connections
+		if (this.autoAgent) {
+			options.agent = (parts.protocol == 'https:') ? this.autoAgent.https : this.autoAgent.http;
+		}
+		else if (!('agent' in options)) {
+			options.agent = false;
+			options.keepAlive = false;
+		}
 		
 		// default headers
 		if (!options.headers) options.headers = {};
@@ -451,13 +482,20 @@ module.exports = Class.create({
 				return;
 			}
 			
+			// user might want non-success response codes to be considered errors
+			var err = null;
+			if (self.autoError && !res.statusCode.toString().match(self.successMatch)) {
+				err = new Error( "HTTP " + res.statusCode + " " + res.statusMessage );
+				err.code = res.statusCode;
+			}
+			
 			if (download) {
 				// stream content to a pipe
 				download.on('finish', function() {
 					perf.end('receive', perf.perf.total.start);
 					if (callback && !callback_fired) {
 						callback_fired = true;
-						callback( null, res, download, self.finishPerf(perf) );
+						callback( err, res, download, self.finishPerf(perf) );
 					}
 				} );
 				
@@ -508,21 +546,21 @@ module.exports = Class.create({
 						// check for gzip encoding
 						if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i) && callback) {
 							// gunzip data first
-							zlib.gunzip( buf, function(err, data) {
+							zlib.gunzip( buf, function(zerr, data) {
 								perf.end('decompress', perf.perf.total.start);
 								if (!callback_fired) {
 									callback_fired = true;
-									callback( err, res, data, self.finishPerf(perf) );
+									callback( err || zerr, res, data, self.finishPerf(perf) );
 								}
 							} );
 						}
 						else if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bdeflate\b/i) && callback) {
 							// inflate data first
-							zlib.inflate( buf, function(err, data) {
+							zlib.inflate( buf, function(zerr, data) {
 								perf.end('decompress', perf.perf.total.start);
 								if (!callback_fired) {
 									callback_fired = true;
-									callback( err, res, data, self.finishPerf(perf) );
+									callback( err || zerr, res, data, self.finishPerf(perf) );
 								}
 							} );
 						}
@@ -530,7 +568,7 @@ module.exports = Class.create({
 							// response content is not encoded
 							if (callback && !callback_fired) {
 								callback_fired = true;
-								callback( null, res, buf, self.finishPerf(perf) );
+								callback( err, res, buf, self.finishPerf(perf) );
 							}
 						}
 					}
@@ -538,7 +576,7 @@ module.exports = Class.create({
 						// response content is empty
 						if (callback && !callback_fired) {
 							callback_fired = true;
-							callback( null, res, Buffer.alloc(0), self.finishPerf(perf) );
+							callback( err, res, Buffer.alloc(0), self.finishPerf(perf) );
 						}
 					}
 				} ); // end

@@ -109,7 +109,7 @@ request.get( 'https://www.bitstamp.net/api/ticker/', function(err, resp, data) {
 
 Your callback function is passed an error object (which will be false upon success), the HTTP response object from Node ([IncomingMessage](https://nodejs.org/api/http.html#http_http_incomingmessage)), and a data buffer of the content (if any).
 
-Note that an "error" in this case is something like a TCP connection failure, DNS lookup failure, socket timeout, connection aborted, or other internal client library failure.  HTTP response codes like 404 or 500 are *not* considered errors, so make sure to look at `resp.statusCode` if you are expecting an HTTP 200.
+Note that an "error" in this case is something like a TCP connection failure, DNS lookup failure, socket timeout, connection aborted, or other internal client library failure.  By default, HTTP response codes like 404 or 500 are *not* considered errors, so make sure to look at `resp.statusCode` if you are expecting an HTTP 200.  However, if you *want* non-200 response codes to be considered errors, see [Automatic Errors](#automatic-errors) below.
 
 To specify additional options, such as custom request headers or HTTP authentication, include an object just before the callback:
 
@@ -162,7 +162,7 @@ Your key/value pairs will be serialized using the `application/x-www-form-urlenc
 
 Your callback function is passed an error object (which will be false upon success), the HTTP response object from Node ([IncomingMessage](https://nodejs.org/api/http.html#http_http_incomingmessage)), and a data buffer of the content (if any).
 
-Note that an "error" in this case is something like a TCP connection failure, DNS lookup failure, socket timeout, connection aborted, or other internal client library failure.  HTTP response codes like 404 or 500 are *not* considered errors, so make sure to look at `resp.statusCode` if you are expecting an HTTP 200.
+Note that an "error" in this case is something like a TCP connection failure, DNS lookup failure, socket timeout, connection aborted, or other internal client library failure.  By default, HTTP response codes like 404 or 500 are *not* considered errors, so make sure to look at `resp.statusCode` if you are expecting an HTTP 200.  However, if you *want* non-200 response codes to be considered errors, see [Automatic Errors](#automatic-errors) below.
 
 Check out the Node [http.request](https://nodejs.org/api/http.html#http_http_request_options_callback) documentation for all the properties you can pass in the options object.
 
@@ -339,7 +339,25 @@ Your `pre_download` function can optionally return `false`, which will inform th
 
 ## Keep-Alives
 
-To reuse the same socket connection across multiple requests, you need to use a [http.Agent](https://nodejs.org/api/http.html#http_class_http_agent) object (provided by Node).  Simply construct an instance, set the `keepAlive` property to `true`, and pass it into the options object for your requests, using the `agent` property:
+To reuse the same socket connection across multiple requests, you have two options.  First, you can use the built-in Keep-Alive handler by calling the `setKeepAlive()` method and passing `true`.  Example:
+
+```js
+request.setKeepAlive( true );
+```
+
+This will attempt to use HTTP Keep-Alives for all HTTP and HTTPS requests, by using two global [http.Agent](https://nodejs.org/api/http.html#http_class_http_agent) objects (one per protocol).  Note that you can configure the options passed to the agents by specifying them as a secondary object to the `setKeepAlive()` method:
+
+```js
+request.setKeepAlive( true, {
+	keepAlive: true,
+	keepAliveMsecs: 1000,
+	maxSockets: 256,
+	maxFreeSockets: 256,
+	timeout: 5000
+} );
+```
+
+Alternatively, you can use your own [http.Agent](https://nodejs.org/api/http.html#http_class_http_agent) object (provided by Node).  Simply construct an instance, set the `keepAlive` property to `true`, and pass it into the options object for your requests, using the `agent` property:
 
 ```javascript
 var http = require('http');
@@ -583,6 +601,24 @@ If you want to follow an unlimited number of redirects, set this to boolean `tru
 
 The library recognizes HTTP codes 301, 302, 307 and 308 as "redirect" responses, as long as a `Location` header accompanies them.
 
+# Automatic Errors
+
+When using `get()` or `post()`, HTTP response codes like 404 or 500 are *not* considered errors, so you have to look at `resp.statusCode` if you are expecting an HTTP 200.  However, this is configurable.  If you would like all non-200 response codes to be considered errors, call the `setAutoError()` method and pass `true`.  Example:
+
+```js
+request.setAutoError( true );
+```
+
+Note that if you allow [redirects](#automatic-redirects), they will not generate an error.
+
+To customize which response codes are considered "successful" and should *not* generate an error, call the `setSuccessMatch()` method, and pass in a new one.  The default match is shown here, which considered any HTTP response code in the 200 - 299 range to be successful:
+
+```js
+request.setSuccessMatch( /^2\d\d$/ );
+```
+
+Note that this regular expression also affects the [json()](#json-rest-api) and [xml()](#xml-rest-api) wrapper methods.
+
 # Compressed Responses
 
 The request library automatically handles Gzip and Deflate encoded responses that come back from the remote server.  These are transparently decoded for you.  However, you should know that by default all outgoing requests include an `Accept-Encoding: gzip, deflate` header, which broadcasts our support for it.  If you do not want responses to be compressed, you can unset this header.  See the [Default Headers](#default-headers) section above.
@@ -683,7 +719,7 @@ Please only do this if you understand the security ramifications, and *completel
 
 The MIT License
 
-Copyright (c) 2015 - 2016 Joseph Huckaby.
+Copyright (c) 2015 - 2018 Joseph Huckaby.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
