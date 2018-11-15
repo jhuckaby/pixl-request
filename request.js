@@ -238,7 +238,10 @@ module.exports = Class.create({
 		var key;
 		if (!options) options = {};
 		if (!options.headers) options.headers = {};
-		if (!options.data) options.data = '';
+		if (!options.data) {
+			if (options.files) options.data = {};
+			else options.data = '';
+		}
 		
 		options.method = 'POST';
 		
@@ -309,8 +312,7 @@ module.exports = Class.create({
 			} // multipart
 			else {
 				// form urlencoded
-				options.data = querystring.stringify(options.data);
-				options.data = Buffer.from(options.data);
+				options.data = Buffer.from( querystring.stringify(options.data) );
 				options.headers['Content-Type'] = 'application/x-www-form-urlencoded';
 			}
 		} // serialize data
