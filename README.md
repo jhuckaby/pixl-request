@@ -4,12 +4,13 @@ This module is a very simple wrapper around Node's built-in [http](https://nodej
 
 # Table of Contents
 
-- [Overview](#overview)
+<!-- toc -->
 - [Usage](#usage)
 - [Method List](#method-list)
 - [Request Types](#request-types)
 	* [HTTP GET](#http-get)
 	* [HTTP POST](#http-post)
+	* [Pure Data POST](#pure-data-post)
 	* [Multipart POST](#multipart-post)
 	* [File Uploads](#file-uploads)
 	* [File Downloads](#file-downloads)
@@ -20,6 +21,8 @@ This module is a very simple wrapper around Node's built-in [http](https://nodej
 - [Default Headers](#default-headers)
 - [Handling Timeouts](#handling-timeouts)
 - [Automatic Redirects](#automatic-redirects)
+- [Automatic Errors](#automatic-errors)
+- [Automatic Retries](#automatic-retries)
 - [Compressed Responses](#compressed-responses)
 - [Performance Metrics](#performance-metrics)
 - [DNS Caching](#dns-caching)
@@ -619,6 +622,18 @@ request.setSuccessMatch( /^2\d\d$/ );
 
 Note that this regular expression also affects the [json()](#json-rest-api) and [xml()](#xml-rest-api) wrapper methods.
 
+# Automatic Retries
+
+By default errors are not retried, and your callback is fired immediately on the first error.  However, you can enable automatic retries by either including a `retries` property in your options object (set to the maximum number of retries you want to allow), or by calling the `setRetries()` method, and specifying the maximum amount for all requests:
+
+```js
+request.setRetries( 5 );
+```
+
+This example would make up to 6 total attempts (the initial attempt plus up to 5 retries), before ultimately failing the operation and firing your callback with the last error encountered.
+
+For the purpose of automatic retries an "error" is considered to be any core error emitted on the request object, such as a DNS lookup failure, TCP connect failure, socket timeout, or any HTTP response code in the `5xx` range (500 - 599), such as an `Internal Server Error`.  Any other errors, for example anything in the `4xx` range, are *not* retried, as they are typically considered to be more permanent.
+
 # Compressed Responses
 
 The request library automatically handles Gzip and Deflate encoded responses that come back from the remote server.  These are transparently decoded for you.  However, you should know that by default all outgoing requests include an `Accept-Encoding: gzip, deflate` header, which broadcasts our support for it.  If you do not want responses to be compressed, you can unset this header.  See the [Default Headers](#default-headers) section above.
@@ -717,9 +732,9 @@ Please only do this if you understand the security ramifications, and *completel
 
 # License
 
-The MIT License
+**The MIT License**
 
-Copyright (c) 2015 - 2018 Joseph Huckaby.
+*Copyright (c) 2015 - 2018 Joseph Huckaby.*
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

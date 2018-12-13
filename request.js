@@ -34,6 +34,7 @@ module.exports = Class.create({
 	
 	// do not follow redirects by default
 	defaultFollow: false,
+	followMatch: /^(301|302|307|308)$/,
 	
 	// do not cache DNS by default (TTL 0s)
 	dnsTTL: 0,
@@ -49,6 +50,10 @@ module.exports = Class.create({
 	
 	// use pooled http/https agents for keep-alive connections
 	autoAgent: false,
+	
+	// optional retries for certain kinds of transient network errors
+	defaultRetries: false,
+	retryMatch: /^5\d\d$/,
 	
 	__construct: function(useragent) {
 		// class constructor
@@ -77,6 +82,12 @@ module.exports = Class.create({
 		// override the default follow setting (boolean or int)
 		// specify integer to set limit of max redirects to allow
 		this.defaultFollow = follow;
+	},
+	
+	setRetries: function(retries) {
+		// override the default retry setting (boolean or int)
+		// specify integer to set limit of max retries to allow
+		this.defaultRetries = retries;
 	},
 	
 	setDNSCache: function(ttl) {
@@ -410,11 +421,18 @@ module.exports = Class.create({
 			delete options.timeout;
 		}
 		
-		// auto-follow redirects
+		// optionally follow redirects
 		var follow = this.defaultFollow;
 		if ('follow' in options) {
 			follow = options.follow;
 			delete options.follow;
+		}
+		
+		// optionally retry errors
+		var retries = this.defaultRetries;
+		if ('retries' in options) {
+			retries = options.retries;
+			delete options.retries;
 		}
 		
 		// stream mode
@@ -466,12 +484,13 @@ module.exports = Class.create({
 			if (timer) { clearTimeout(timer); timer = null; }
 			
 			// check for auto-redirect
-			if (follow && res.statusCode.toString().match(/^(301|302|307|308)$/) && res.headers['location']) {
+			if (follow && res.statusCode.toString().match(self.followMatch) && res.headers['location']) {
 				// revert options to original state
 				options.timeout = timeout;
 				options.follow = (typeof(follow) == 'number') ? (follow - 1) : follow;
 				options.download = download;
 				options.pre_download = pre_download;
+				options.retries = retries;
 				
 				delete options.hostname;
 				delete options.port;
@@ -481,6 +500,26 @@ module.exports = Class.create({
 				// recurse into self for redirect
 				callback_fired = true; // prevent firing twice
 				self.request( res.headers['location'], options, callback );
+				return;
+			}
+			
+			// check for retry
+			if (retries && res.statusCode.toString().match(self.retryMatch)) {
+				// revert options to original state
+				options.timeout = timeout;
+				options.follow = follow;
+				options.download = download;
+				options.pre_download = pre_download;
+				options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
+				
+				delete options.hostname;
+				delete options.port;
+				delete options.path;
+				delete options.auth;
+				
+				// recurse into self for retry
+				callback_fired = true; // prevent firing twice
+				self.request( url, options, callback );
 				return;
 			}
 			
@@ -631,6 +670,26 @@ module.exports = Class.create({
 				}
 				if (timer) { clearTimeout(timer); timer = null; }
 				if (!callback_fired) {
+					// check for retry
+					if (retries) {
+						// revert options to original state
+						options.timeout = timeout;
+						options.follow = follow;
+						options.download = download;
+						options.pre_download = pre_download;
+						options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
+						
+						delete options.hostname;
+						delete options.port;
+						delete options.path;
+						delete options.auth;
+						
+						// recurse into self for retry
+						callback_fired = true; // prevent firing twice
+						self.request( url, options, callback );
+						return;
+					}
+					
 					callback_fired = true;
 					callback( new Error(msg), null, null, self.finishPerf(perf) );
 				}
@@ -645,6 +704,26 @@ module.exports = Class.create({
 					aborted = true;
 					req.abort();
 					if (callback && !callback_fired) {
+						// check for retry
+						if (retries) {
+							// revert options to original state
+							options.timeout = timeout;
+							options.follow = follow;
+							options.download = download;
+							options.pre_download = pre_download;
+							options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
+							
+							delete options.hostname;
+							delete options.port;
+							delete options.path;
+							delete options.auth;
+							
+							// recurse into self for retry
+							callback_fired = true; // prevent firing twice
+							self.request( url, options, callback );
+							return;
+						}
+						
 						callback_fired = true;
 						callback( new Error("Socket Timeout ("+timeout+" ms)"), null, null, self.finishPerf(perf) );
 					}
