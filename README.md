@@ -9,10 +9,13 @@ This module is a very simple wrapper around Node's built-in [http](https://nodej
 - [Method List](#method-list)
 - [Request Types](#request-types)
 	* [HTTP GET](#http-get)
+	* [HTTP HEAD](#http-head)
 	* [HTTP POST](#http-post)
-	* [Pure Data POST](#pure-data-post)
-	* [Multipart POST](#multipart-post)
-	* [File Uploads](#file-uploads)
+		+ [Pure Data POST](#pure-data-post)
+		+ [Multipart POST](#multipart-post)
+		+ [File Uploads](#file-uploads)
+	* [HTTP PUT](#http-put)
+	* [HTTP DELETE](#http-delete)
 	* [File Downloads](#file-downloads)
 		+ [Advanced Stream Control](#advanced-stream-control)
 	* [Keep-Alives](#keep-alives)
@@ -76,7 +79,10 @@ Here are all the methods available in the request library:
 | Method Name | Description |
 |---------------|-------------|
 | [get()](#http-get) | Performs an HTTP GET request. |
+| [head()](#http-head) | Performs an HTTP HEAD request. |
 | [post()](#http-post) | Performs an HTTP POST request. |
+| [put()](#http-put) | Performs an HTTP PUT request. |
+| [delete()](#http-delete) | Performs an HTTP DELETE request. |
 | [json()](#json-rest-api) | Sends a request to a JSON REST API endpoint and parses the response. |
 | [xml()](#xml-rest-api) | Sends a request to an XML REST API endpoint and parses the response. |
 | [setHeader()](#default-headers) | Overrides or adds a default header for future requests. |
@@ -137,6 +143,25 @@ Check out the Node [http.request](https://nodejs.org/api/http.html#http_http_req
 
 By default, connections are closed at the end of each request.  If you want to reuse a persistent connection across multiple requests, see the [Keep-Alives](#keep-alives) section below.
 
+## HTTP HEAD
+
+```
+head( URL, CALLBACK )
+head( URL, OPTIONS, CALLBACK )
+```
+
+An HTTP HEAD request will not contain any data in the response, only the response code and headers.  Example:
+
+```js
+request.head( 'http://myserver.com/index.html', function(err, resp) {
+	if (err) console.log("ERROR: " + err);
+	else {
+		console.log("Status: " + resp.statusCode + " " + resp.statusMessage);
+		console.log("Headers: ", resp.headers);
+	}
+} );
+```
+
 ## HTTP POST
 
 ```
@@ -171,7 +196,7 @@ Check out the Node [http.request](https://nodejs.org/api/http.html#http_http_req
 
 By default, connections are closed at the end of each request.  If you want to reuse a persistent connection across multiple requests, see the [Keep-Alives](#keep-alives) section below.
 
-## Pure Data POST
+### Pure Data POST
 
 To specify your own raw POST data without any key/value pre-formatting, simply pass a `Buffer` object as the `data` property value, then include your own `Content-Type` header in the `headers` object.  Example:
 
@@ -192,7 +217,7 @@ function(err, resp, data) {
 } );
 ```
 
-## Multipart POST
+### Multipart POST
 
 For a `multipart/form-data` post, which is typically better for binary data, all you need to do is pass in a `multipart` property in your options object, and set it to a true value.  Everything else is the same as a standard [HTTP POST](#http-post):
 
@@ -214,7 +239,7 @@ function(err, resp, data) {
 
 Note that you can use [Buffer](https://nodejs.org/api/buffer.html) objects instead of strings for your data values.
 
-## File Uploads
+### File Uploads
 
 To upload files, use `post()` and include a `files` object with your options, containing key/pair pairs.  Each file needs an identifier key (POST field name), and a value which should be a path to the file on disk:
 
@@ -277,6 +302,58 @@ function(err, resp, data) {
 ```
 
 Including a `files` property automatically sets `multipart/form-data` mode, so you don't need to include the `multipart` boolean flag in this case.
+
+## HTTP PUT
+
+```
+put( URL, OPTIONS, CALLBACK )
+```
+
+To send an `HTTP PUT`, you can use the `put()` method.  This works identically to `post()` in every way, except that the HTTP method is changed from `POST` to `PUT`.  You can send all the various data types, upload files, etc.  Example:
+
+```js
+request.put( 'http://myserver.com/api/put', {
+	data: {
+		full_name: "Fred Smith", 
+		gender: "male",
+		age: 35
+	}
+}, 
+function(err, resp, data) {
+	if (err) console.log("ERROR: " + err);
+	console.log("Status: " + resp.statusCode + ' ' + resp.statusMessage);
+	console.log("Headers: ", resp.headers);
+	console.log("Content: " + data);
+} );
+```
+
+Note that data (i.e. request body) is optional, and can be omitted.
+
+## HTTP DELETE
+
+```
+delete( URL, OPTIONS, CALLBACK )
+```
+
+To send an `HTTP DELETE`, you can use the `delete()` method.  This works identically to `post()` in every way, except that the HTTP method is changed from `POST` to `DELETE`.  You can send all the various data types, upload files, etc.  Example:
+
+```js
+request.delete( 'http://myserver.com/api/delete', {
+	data: {
+		full_name: "Fred Smith", 
+		gender: "male",
+		age: 35
+	}
+}, 
+function(err, resp, data) {
+	if (err) console.log("ERROR: " + err);
+	console.log("Status: " + resp.statusCode + ' ' + resp.statusMessage);
+	console.log("Headers: ", resp.headers);
+	console.log("Content: " + data);
+} );
+```
+
+Note that data (i.e. request body) is optional, and can be omitted.
 
 ## File Downloads
 
@@ -417,7 +494,34 @@ function(err, resp, data) {
 } );
 ```
 
-If you pass `null` or `false` as the JSON data argument, the request will be sent as a `GET` instead of a `POST`.
+If you pass `null` or `false` as the JSON data argument, the request will be sent as a `GET` instead of a `POST`.  You can also customize the HTTP method by passing a `method` property into the `options` object.  For example, the following would send as a `HTTP PUT` with the JSON serialized in the request body:
+
+```js
+var json = {
+	foo: "test", 
+	bar: 123
+};
+
+request.json( 'http://myserver.com/api', json, {
+	method: "PUT", // override the default method here
+}, 
+function(err, resp, data) {
+	if (err) console.log("ERROR: " + err);
+	else console.log( "Success: ", data );
+} );
+```
+
+You can also send a custom request method with no body:
+
+```js
+request.json( 'http://myserver.com/delete/user/345', false, {
+	method: "DELETE", // override the default method here
+}, 
+function(err, resp, data) {
+	if (err) console.log("ERROR: " + err);
+	else console.log( "Success: ", data );
+} );
+```
 
 **Note:** If the server doesn't send back JSON, or it cannot be parsed, an error will be sent to your callback.
 
@@ -498,7 +602,34 @@ function(err, resp, data) {
 } );
 ```
 
-If you pass `null` or `false` as the XML data argument, the request will be sent as a `GET` instead of a `POST`.
+If you pass `null` or `false` as the XML data argument, the request will be sent as a `GET` instead of a `POST`.  You can also customize the HTTP method by passing a `method` property into the `options` object.  For example, the following would send as a `HTTP PUT` with the XML serialized in the request body:
+
+```js
+var xml = {
+	foo: "test", 
+	bar: 123
+};
+
+request.xml( 'http://myserver.com/api', xml, {
+	method: "PUT", // override the default method here
+}, 
+function(err, resp, data) {
+	if (err) console.log("ERROR: " + err);
+	else console.log( "Success: ", data );
+} );
+```
+
+You can also send a custom request method with no body:
+
+```js
+request.xml( 'http://myserver.com/delete/user/234', false, {
+	method: "DELETE", // override the default method here
+}, 
+function(err, resp, data) {
+	if (err) console.log("ERROR: " + err);
+	else console.log( "Success: ", data );
+} );
+```
 
 **Note:** If the server doesn't send back XML, or it cannot be parsed, an error will be sent to your callback.
 

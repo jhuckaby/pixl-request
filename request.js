@@ -226,7 +226,7 @@ module.exports = Class.create({
 			options = {};
 		}
 		if (!options) options = {};
-		options.method = 'GET';
+		if (!options.method) options.method = 'GET';
 		this.request( url, options, callback );
 	},
 	
@@ -239,7 +239,7 @@ module.exports = Class.create({
 			options = {};
 		}
 		if (!options) options = {};
-		options.method = 'HEAD';
+		if (!options.method) options.method = 'HEAD';
 		this.request( url, options, callback );
 	},
 	
@@ -254,7 +254,13 @@ module.exports = Class.create({
 			else options.data = '';
 		}
 		
-		options.method = 'POST';
+		if (!options.method) options.method = 'POST';
+		
+		if (!options.data) {
+			// non-data post (or custom method)
+			delete options.data;
+			return this.request( url, options, callback );
+		}
 		
 		// see if we have a buffer, string or other
 		var is_buffer = (options.data instanceof Buffer);
@@ -329,6 +335,32 @@ module.exports = Class.create({
 		} // serialize data
 		
 		this.request( url, options, callback );
+	},
+	
+	put: function(url, options, callback) {
+		// perform HTTP PUT
+		// callback will receive: err, res, data
+		if (!callback) {
+			// support two-argument calling convention: url and callback
+			callback = options;
+			options = {};
+		}
+		if (!options) options = {};
+		if (!options.method) options.method = 'PUT';
+		this.post( url, options, callback );
+	},
+	
+	delete: function(url, options, callback) {
+		// perform HTTP DELETE
+		// callback will receive: err, res, data
+		if (!callback) {
+			// support two-argument calling convention: url and callback
+			callback = options;
+			options = {};
+		}
+		if (!options) options = {};
+		if (!options.method) options.method = 'DELETE';
+		this.post( url, options, callback );
 	},
 	
 	request: function(url, options, callback) {
