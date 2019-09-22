@@ -1,6 +1,6 @@
 # Overview
 
-This module is a very simple wrapper around Node's built-in [http](https://nodejs.org/api/http.html) library for making HTTP requests.  It provides an easy way to send an HTTP GET or POST, including things like support for HTTPS (SSL), file uploads and JSON REST style API calls.  Gzip-encoded responses are also handled automatically.
+This module is a very simple wrapper around Node's built-in [http](https://nodejs.org/api/http.html) library for making HTTP requests.  It provides an easy way to send an HTTP GET or POST, including things like support for HTTPS (SSL), file uploads and JSON REST style API calls.  Compressed responses are also handled automatically.
 
 # Table of Contents
 
@@ -372,7 +372,7 @@ function(err, resp) {
 } );
 ```
 
-Your callback will only be invoked when the file is *completely* downloaded and written to the stream.  If the response is Gzip-encoded, this is handled transparently for you using an intermediate stream.  Your file will contain the final decompressed data, and no memory will be used.
+Your callback will only be invoked when the file is *completely* downloaded and written to the stream.  If the response is encoded (compressed), this is handled transparently for you using an intermediate stream.  Your file will contain the final decompressed data, and no memory will be used.
 
 Alternatively, if you already have an open stream object, you can pass that to the `download` property.  Example:
 
@@ -639,7 +639,7 @@ By default the request library will add the following outgoing headers to every 
 
 ```
 User-Agent: PixlRequest 1.0.0
-Accept-Encoding: gzip, deflate
+Accept-Encoding: gzip, deflate, br
 ```
 
 You can override these by passing in custom headers with your request:
@@ -767,7 +767,7 @@ For the purpose of automatic retries an "error" is considered to be any core err
 
 # Compressed Responses
 
-The request library automatically handles Gzip and Deflate encoded responses that come back from the remote server.  These are transparently decoded for you.  However, you should know that by default all outgoing requests include an `Accept-Encoding: gzip, deflate` header, which broadcasts our support for it.  If you do not want responses to be compressed, you can unset this header.  See the [Default Headers](#default-headers) section above.
+The request library automatically handles Brotli, Gzip and Deflate encoded responses that come back from the remote server.  These are transparently decoded for you.  However, you should know that by default all outgoing requests include an `Accept-Encoding: gzip, deflate, br` header, which broadcasts our support for it.  If you do not want responses to be compressed, you can unset this header.  See the [Default Headers](#default-headers) section above.
 
 Alternately, if you would prefer that the library not do anything regarding compression, and pass the compressed response directly through without touching it, call the `setAutoDecompress()` method, and pass in `false`:
 
@@ -820,7 +820,7 @@ All the `perf` values are in milliseconds (represented by the `scale`).  Here ar
 | `send` | Time to send the request data (typically for POST / PUT).  Also includes SSL handshake time (if HTTPS). |
 | `wait` | Time spent waiting for the server response (after request is sent). |
 | `receive` | Time spent downloading data from the server (after headers received). |
-| `decompress` | Time taken to decompress the response (if encoded with Gzip or Deflate). |
+| `decompress` | Time taken to decompress the response (if encoded with Brotli, Gzip or Deflate). |
 | `total` | Total time of the entire HTTP transaction. |
 
 As indicated above, some of the properties may be omitted depending on the situation.  For example, if you are using a shared [http.Agent](https://nodejs.org/api/http.html#http_class_http_agent) with Keep-Alives, then subsequent requests to the same host won't perform a DNS lookup or socket connect, so those two metrics will be omitted.  Similarly, if the response from the server isn't compressed, then the `decompress` metric will be omitted.
@@ -853,10 +853,20 @@ request.flushDNSCache();
 
 # SSL Certificate Validation
 
-If you are trying to connect to a host via HTTPS and getting certificate errors, you may have to bypass Node's SSL certification validation.  To do this, set the following environment variable before you make your HTTPS request:
+If you are trying to connect to a host via HTTPS and getting certificate errors, you may have to bypass Node's SSL certification validation.  To do this, set the `rejectUnauthorized` options property to `false`.  Example:
 
 ```js
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+request.get( 'https://www.bitstamp.net/api/ticker/', {
+	rejectUnauthorized: false
+}, 
+function(err, resp, data) {
+	if (err) console.log("ERROR: " + err);
+	else {
+		console.log("Status: " + resp.statusCode + " " + resp.statusMessage);
+		console.log("Headers: ", resp.headers);
+		console.log("Content: " + data);
+	}
+} );
 ```
 
 Please only do this if you understand the security ramifications, and *completely trust* the host you are connecting to, and the network you are on.  Skipping the certificate validation step should really only be done in special circumstances, such as testing your own internal server with a self-signed cert.
@@ -865,7 +875,7 @@ Please only do this if you understand the security ramifications, and *completel
 
 **The MIT License**
 
-*Copyright (c) 2015 - 2018 Joseph Huckaby.*
+*Copyright (c) 2015 - 2019 Joseph Huckaby.*
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

@@ -15,6 +15,9 @@ var Class = require('pixl-class');
 var Perf = require('pixl-perf');
 var ErrNo = require('errno');
 
+// sniff for Brotli compression support, as it was added in Node v10.16
+var hasBrotli = !!zlib.BrotliCompress;
+
 var pixlreq_agent = "PixlRequest " + require('./package.json').version;
 var dns_cache = {};
 
@@ -58,7 +61,7 @@ module.exports = Class.create({
 	__construct: function(useragent) {
 		// class constructor
 		this.defaultHeaders = {
-			'Accept-Encoding': "gzip, deflate"
+			'Accept-Encoding': hasBrotli ? "gzip, deflate, br" : "gzip, deflate"
 		};
 		this.setUserAgent( useragent || pixlreq_agent );
 	},
@@ -580,6 +583,10 @@ module.exports = Class.create({
 						download = null;
 					}
 				}
+				else if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bbr\b/i) && hasBrotli) {
+					// brotli stream
+					res.pipe( zlib.createBrotliDecompress() ).pipe( download );
+				}
 				else if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i)) {
 					// gunzip stream
 					res.pipe( zlib.createGunzip() ).pipe( download );
@@ -616,8 +623,18 @@ module.exports = Class.create({
 					if (total_bytes) {
 						var buf = Buffer.concat(chunks, total_bytes);
 						
-						// check for gzip encoding
-						if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i) && callback) {
+						// check for encoding
+						if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bbr\b/i) && hasBrotli && callback) {
+							// brotli decompress
+							zlib.brotliDecompress( buf, function(zerr, data) {
+								perf.end('decompress', perf.perf.total.start);
+								if (!callback_fired) {
+									callback_fired = true;
+									callback( err || zerr, res, data, self.finishPerf(perf) );
+								}
+							} );
+						}
+						else if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i) && callback) {
 							// gunzip data first
 							zlib.gunzip( buf, function(zerr, data) {
 								perf.end('decompress', perf.perf.total.start);
@@ -638,7 +655,7 @@ module.exports = Class.create({
 							} );
 						}
 						else {
-							// response content is not encoded
+							// response content is not encoded (or autoDecompress is false)
 							if (callback && !callback_fired) {
 								callback_fired = true;
 								callback( err, res, buf, self.finishPerf(perf) );
