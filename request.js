@@ -372,6 +372,7 @@ module.exports = Class.create({
 		var self = this;
 		var callback_fired = false;
 		var timer = null;
+		var socket = null;
 		var key;
 		if (!options) options = {};
 		else {
@@ -614,10 +615,12 @@ module.exports = Class.create({
 				res.on('end', function() {
 					// end of response
 					perf.end('receive', perf.perf.total.start);
-					perf.count('bytes_sent', (res.socket.bytesWritten || 0) - (res.socket._pixl_orig_bytes_written || 0));
-					perf.count('bytes_received', (res.socket.bytesRead || 0) - (res.socket._pixl_orig_bytes_read || 0));
-					res.socket._pixl_orig_bytes_written = res.socket.bytesWritten || 0;
-					res.socket._pixl_orig_bytes_read = res.socket.bytesRead || 0;
+					if (socket) {
+						perf.count('bytes_sent', (socket.bytesWritten || 0) - (socket._pixl_orig_bytes_written || 0));
+						perf.count('bytes_received', (socket.bytesRead || 0) - (socket._pixl_orig_bytes_read || 0));
+						socket._pixl_orig_bytes_written = socket.bytesWritten || 0;
+						socket._pixl_orig_bytes_read = socket.bytesRead || 0;
+					}
 					
 					// prepare data
 					if (total_bytes) {
@@ -674,15 +677,17 @@ module.exports = Class.create({
 			
 		} ); // request
 		
-		req.on('socket', function(socket) {
+		req.on('socket', function(sock) {
 			// hook some socket events once we have a reference to it
+			socket = sock;
+			
 			if (!socket._pixl_request_hooked) {
 				socket._pixl_request_hooked = true;
 				
 				// Disable the Nagle algorithm.
 				socket.setNoDelay( true );
 				
-				socket.on('lookup', function(err, address, family, hostname) {
+				socket.once('lookup', function(err, address, family, hostname) {
 					// track DNS lookup time
 					perf.end('dns', perf.perf.total.start);
 					
@@ -695,7 +700,7 @@ module.exports = Class.create({
 					}
 				} );
 				
-				socket.on('connect', function() {
+				socket.once('connect', function() {
 					// track socket connect time
 					perf.end('connect', perf.perf.total.start);
 				} );
