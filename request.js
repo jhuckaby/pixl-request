@@ -58,6 +58,10 @@ module.exports = Class.create({
 	defaultRetries: false,
 	retryMatch: /^5\d\d$/,
 	
+	// automatically include Content-Length header where applicable
+	// disable if you want chunked transfer encoding
+	autoContentLength: true,
+	
 	__construct: function(useragent) {
 		// class constructor
 		this.defaultHeaders = {
@@ -132,6 +136,11 @@ module.exports = Class.create({
 			this.autoAgent.https.destroy();
 			this.autoAgent = false;
 		}
+	},
+	
+	setAutoContentLength: function(enabled) {
+		// automatically include Content-Length, or not
+		this.autoContentLength = enabled;
 	},
 	
 	json: function(url, data, options, callback) {
@@ -443,8 +452,8 @@ module.exports = Class.create({
 					options.headers[key] = form_headers[key];
 				}
 			}
-			else {
-				// raw data (string or buffer)
+			else if (this.autoContentLength || (options.method != 'POST')) {
+				// raw data (string or buffer), add content-Length
 				options.headers['Content-Length'] = post_data.length;
 			}
 		}
@@ -789,8 +798,10 @@ module.exports = Class.create({
 			// write post data to socket
 			if (is_form) post_data.pipe( req );
 			else {
-				req.write( post_data );
-				req.end();
+				// Note: Sending data with req.end() prevents chunked transfer encoding
+				req.end( post_data );
+				// req.write( post_data );
+				// req.end();
 			}
 		}
 		else req.end();
