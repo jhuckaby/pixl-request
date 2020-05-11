@@ -799,9 +799,9 @@ module.exports = Class.create({
 			if (is_form) post_data.pipe( req );
 			else {
 				// Note: Sending data with req.end() prevents chunked transfer encoding
-				req.end( post_data );
-				// req.write( post_data );
-				// req.end();
+				// req.end( post_data );
+				req.write( post_data );
+				req.end();
 			}
 		}
 		else req.end();
