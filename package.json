@@ -1,6 +1,6 @@
 {
 	"name": "pixl-request",
-	"version": "1.0.30",
+	"version": "1.0.31",
 	"description": "A very simple module for making HTTP requests.",
 	"author": "Joseph Huckaby <jhuckaby@gmail.com>",
 	"homepage": "https://github.com/jhuckaby/pixl-request",

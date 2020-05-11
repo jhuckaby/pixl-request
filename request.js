@@ -541,6 +541,8 @@ module.exports = Class.create({
 				delete options.path;
 				delete options.auth;
 				
+				if (post_data !== null) options.data = post_data;
+				
 				// recurse into self for redirect
 				callback_fired = true; // prevent firing twice
 				self.request( res.headers['location'], options, callback );
@@ -560,6 +562,8 @@ module.exports = Class.create({
 				delete options.port;
 				delete options.path;
 				delete options.auth;
+				
+				if (post_data !== null) options.data = post_data;
 				
 				// recurse into self for retry
 				callback_fired = true; // prevent firing twice
@@ -746,6 +750,8 @@ module.exports = Class.create({
 						delete options.path;
 						delete options.auth;
 						
+						if (post_data !== null) options.data = post_data;
+						
 						// recurse into self for retry
 						callback_fired = true; // prevent firing twice
 						self.request( url, options, callback );
@@ -779,6 +785,8 @@ module.exports = Class.create({
 							delete options.port;
 							delete options.path;
 							delete options.auth;
+							
+							if (post_data !== null) options.data = post_data;
 							
 							// recurse into self for retry
 							callback_fired = true; // prevent firing twice
