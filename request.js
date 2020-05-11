@@ -291,14 +291,12 @@ module.exports = Class.create({
 			if (options.json) {
 				// JSON REST
 				options.data = JSON.stringify(options.data) + "\n";
-				options.data = Buffer.from(options.data);
 				options.headers['Content-Type'] = 'application/json';
 				delete options.json;
 			}
 			else if (options.xml) {
 				// XML REST
 				options.data = XML.stringify(options.data, options.xmlRootNode || 'Request') + "\n";
-				options.data = Buffer.from(options.data);
 				options.headers['Content-Type'] = 'text/xml';
 				delete options.xml;
 				delete options.xmlRootNode;
@@ -454,6 +452,7 @@ module.exports = Class.create({
 			}
 			else if (this.autoContentLength || (options.method != 'POST')) {
 				// raw data (string or buffer), add content-Length
+				if (typeof(post_data) == 'string') post_data = Buffer.from(post_data, 'utf8');
 				options.headers['Content-Length'] = post_data.length;
 			}
 		}
@@ -799,9 +798,9 @@ module.exports = Class.create({
 			if (is_form) post_data.pipe( req );
 			else {
 				// Note: Sending data with req.end() prevents chunked transfer encoding
-				// req.end( post_data );
-				req.write( post_data );
-				req.end();
+				req.end( post_data );
+				// req.write( post_data );
+				// req.end();
 			}
 		}
 		else req.end();
