@@ -418,6 +418,12 @@ module.exports = Class.create({
 			}
 		}
 		
+		// allow URL to include headers e.g. [Cookie: foo=bar]
+		url = url.replace(/\s+\[([\w\-]+)\:\s*([^\]]+)\]/ig, function(m_all, m_g1, m_g2) {
+			options.headers[ m_g1 ] = m_g2;
+			return '';
+		}).trim();
+		
 		// possibly use dns cache
 		if (this.dnsTTL && dns_cache[options.hostname]) {
 			var now = (new Date()).getTime() / 1000;
