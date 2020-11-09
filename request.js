@@ -288,6 +288,17 @@ module.exports = Class.create({
 		
 		if ((typeof(options.data) == 'object') && !is_buffer) {
 			// serialize data into key/value pairs
+			
+			// allow URL to include data e.g. [data: Key: Value]
+			url = url.replace(/\s*\[data\:\s*([\w\-]+)\:\s*([^\]]+)\]/ig, function(m_all, m_g1, m_g2) {
+				if (m_g2.match(/^\-?\d+$/)) m_g2 = parseInt(m_g2);
+				else if (m_g2.match(/^\-?\d+\.\d+$/)) m_g2 = parseFloat(m_g2);
+				else if (m_g2.match(/^true$/)) m_g2 = true;
+				else if (m_g2.match(/^false$/)) m_g2 = false;
+				options.data[ m_g1 ] = m_g2;
+				return '';
+			}).trim();
+			
 			if (options.json) {
 				// JSON REST
 				options.data = JSON.stringify(options.data) + "\n";
@@ -418,8 +429,8 @@ module.exports = Class.create({
 			}
 		}
 		
-		// allow URL to include headers e.g. [Cookie: foo=bar]
-		url = url.replace(/\s+\[([\w\-]+)\:\s*([^\]]+)\]/ig, function(m_all, m_g1, m_g2) {
+		// allow URL to include headers e.g. [header: Cookie: foo=bar]
+		url = url.replace(/\s*\[header\:\s*([\w\-]+)\:\s*([^\]]+)\]/ig, function(m_all, m_g1, m_g2) {
 			options.headers[ m_g1 ] = m_g2;
 			return '';
 		}).trim();
