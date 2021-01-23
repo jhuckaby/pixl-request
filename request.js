@@ -406,6 +406,13 @@ module.exports = Class.create({
 		
 		// parse url into parts
 		var parts = require('url').parse(url);
+		
+		// standardize on `hostname` instead of `host`
+		// (one is an alias to the other, as per http.request docs)
+		if (options.host && !options.hostname) {
+			options.hostname = options.host;
+			delete options.host;
+		}
 		if (options.hostname && options.port && !options.path) {
 			// user likely wants a proxy request, so put full URL as `path` param
 			options.path = url;
