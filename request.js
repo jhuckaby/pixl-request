@@ -406,6 +406,10 @@ module.exports = Class.create({
 		
 		// parse url into parts
 		var parts = require('url').parse(url);
+		if (options.hostname && options.port && !options.path) {
+			// user likely wants a proxy request, so put full URL as `path` param
+			options.path = url;
+		}
 		if (!options.hostname) options.hostname = parts.hostname;
 		if (!options.port) options.port = parts.port || ((parts.protocol == 'https:') ? 443 : 80);
 		if (!options.path) options.path = parts.path;
