@@ -608,6 +608,8 @@ module.exports = Class.create({
 			
 			if (download) {
 				// stream content to a pipe
+				var decompressor = null;
+				
 				download.on('finish', function() {
 					perf.end('receive', perf.perf.total.start);
 					if (callback && !callback_fired) {
@@ -626,15 +628,21 @@ module.exports = Class.create({
 				}
 				else if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bbr\b/i) && hasBrotli) {
 					// brotli stream
-					res.pipe( zlib.createBrotliDecompress() ).pipe( download );
+					decompressor = zlib.createBrotliDecompress();
+					decompressor.on('error', function(err) { /* no-op */ });
+					res.pipe( decompressor ).pipe( download );
 				}
 				else if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i)) {
 					// gunzip stream
-					res.pipe( zlib.createGunzip() ).pipe( download );
+					decompressor = zlib.createGunzip();
+					decompressor.on('error', function(err) { /* no-op */ });
+					res.pipe( decompressor ).pipe( download );
 				}
 				else if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bdeflate\b/i)) {
 					// inflate stream
-					res.pipe( zlib.createInflate() ).pipe( download );
+					decompressor = zlib.createInflate();
+					decompressor.on('error', function(err) { /* no-op */ });
+					res.pipe( decompressor ).pipe( download );
 				}
 				else {
 					// response is not encoded
