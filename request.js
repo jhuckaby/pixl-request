@@ -178,7 +178,7 @@ module.exports = Class.create({
 			var json = null;
 			try { json = JSON.parse( data.toString() ); }
 			catch (err) {
-				return callback( err, null, null, perf );
+				return callback( err, res, data, perf );
 			}
 			
 			// all good, send json object back
@@ -221,7 +221,7 @@ module.exports = Class.create({
 			var xml = null;
 			try { xml = XML.parse( data.toString() ); }
 			catch (err) {
-				return callback( err, null, null, perf );
+				return callback( err, res, data, perf );
 			}
 			
 			// all good, send xml object back
