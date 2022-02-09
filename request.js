@@ -1,34 +1,40 @@
 // Very simple HTTP request library for Node.js
-// Copyright (c) 2015 - 2018 Joseph Huckaby
+// Copyright (c) 2015 - 2022 Joseph Huckaby
 // Released under the MIT License
 
-var fs = require('fs');
-var http = require('http');
-var https = require('https');
-var querystring = require('querystring');
-var zlib = require('zlib');
-var util = require('util');
+const fs = require('fs');
+const http = require('http');
+const https = require('https');
+const querystring = require('querystring');
+const zlib = require('zlib');
 
-var FormData = require('form-data');
-var XML = require('pixl-xml');
-var Class = require('pixl-class');
-var Perf = require('pixl-perf');
-var ErrNo = require('errno');
+const FormData = require('form-data');
+const XML = require('pixl-xml');
+const Class = require('class-plus');
+const Perf = require('pixl-perf');
+const ErrNo = require('errno');
 
 // sniff for Brotli compression support, as it was added in Node v10.16
-var hasBrotli = !!zlib.BrotliCompress;
+const hasBrotli = !!zlib.BrotliCompress;
+const pixlAgent = "PixlRequest " + require('./package.json').version;
 
-var pixlreq_agent = "PixlRequest " + require('./package.json').version;
 var dns_cache = {};
-
-// util.isArray is DEPRECATED??? Nooooooooode!
-var isArray = Array.isArray || util.isArray;
-
 var http_common = require('_http_common');
 var checkIsHttpToken = http_common._checkIsHttpToken;
 var checkInvalidHeaderChar = http_common._checkInvalidHeaderChar;
 
-module.exports = Class.create({
+module.exports = Class({
+	
+	__asyncify: {
+		json: ['resp', 'data', 'perf'],
+		xml: ['resp', 'data', 'perf'],
+		get: ['resp', 'data', 'perf'],
+		head: ['resp', 'data', 'perf'],
+		post: ['resp', 'data', 'perf'],
+		put: ['resp', 'data', 'perf'],
+		delete: ['resp', 'data', 'perf'],
+		request: ['resp', 'data', 'perf']
+	},
 	
 	defaultHeaders: null,
 	
@@ -60,69 +66,72 @@ module.exports = Class.create({
 	
 	// automatically include Content-Length header where applicable
 	// disable if you want chunked transfer encoding
-	autoContentLength: true,
+	autoContentLength: true
 	
-	__construct: function(useragent) {
+},
+class Request {
+	
+	constructor(useragent) {
 		// class constructor
 		this.defaultHeaders = {
 			'Accept-Encoding': hasBrotli ? "gzip, deflate, br" : "gzip, deflate"
 		};
-		this.setUserAgent( useragent || pixlreq_agent );
-	},
+		this.setUserAgent( useragent || pixlAgent );
+	}
 	
-	setHeader: function(name, value) {
+	setHeader(name, value) {
 		// override or add a default header
 		this.defaultHeaders[name] = value;
-	},
+	}
 	
-	setUserAgent: function(useragent) {
+	setUserAgent(useragent) {
 		// override the default user agent string
 		this.setHeader('User-Agent', useragent);
-	},
+	}
 	
-	setTimeout: function(timeout) {
+	setTimeout(timeout) {
 		// override the default socket idle timeout (milliseconds)
 		this.defaultTimeout = timeout;
-	},
+	}
 	
-	setFollow: function(follow) {
+	setFollow(follow) {
 		// override the default follow setting (boolean or int)
 		// specify integer to set limit of max redirects to allow
 		this.defaultFollow = follow;
-	},
+	}
 	
-	setRetries: function(retries) {
+	setRetries(retries) {
 		// override the default retry setting (boolean or int)
 		// specify integer to set limit of max retries to allow
 		this.defaultRetries = retries;
-	},
+	}
 	
-	setDNSCache: function(ttl) {
+	setDNSCache(ttl) {
 		// set a DNS cache TTL (seconds) or 0 to disable
 		this.dnsTTL = ttl;
-	},
+	}
 	
-	flushDNSCache: function() {
+	flushDNSCache() {
 		// remove all IPs from the internal DNS cache
 		dns_cache = {};
-	},
+	}
 	
-	setSuccessMatch: function(regexp) {
+	setSuccessMatch(regexp) {
 		// set success match for http code (json/xml wrappers)
 		this.successMatch = regexp;
-	},
+	}
 	
-	setAutoDecompress: function(enabled) {
+	setAutoDecompress(enabled) {
 		// set auto decompress (boolean: enabled/disabled)
 		this.autoDecompress = enabled;
-	},
+	}
 	
-	setAutoError: function(enabled) {
+	setAutoError(enabled) {
 		// set auto error mode (based on successMatch)
 		this.autoError = enabled;
-	},
+	}
 	
-	setKeepAlive: function(enabled, opts) {
+	setKeepAlive(enabled, opts) {
 		// set auto agent mode
 		if (enabled && !this.autoAgent) {
 			if (!opts) opts = { keepAlive: true };
@@ -136,14 +145,14 @@ module.exports = Class.create({
 			this.autoAgent.https.destroy();
 			this.autoAgent = false;
 		}
-	},
+	}
 	
-	setAutoContentLength: function(enabled) {
+	setAutoContentLength(enabled) {
 		// automatically include Content-Length, or not
 		this.autoContentLength = enabled;
-	},
+	}
 	
-	json: function(url, data, options, callback) {
+	json(url, data, options, callback) {
 		// convenience method: get or post json, get json back
 		var self = this;
 		
@@ -184,9 +193,9 @@ module.exports = Class.create({
 			// all good, send json object back
 			callback( null, res, json, perf );
 		} );
-	},
+	}
 	
-	xml: function(url, data, options, callback) {
+	xml(url, data, options, callback) {
 		// convenience method: get or post xml, get xml back
 		var self = this;
 		
@@ -227,9 +236,9 @@ module.exports = Class.create({
 			// all good, send xml object back
 			callback( null, res, xml, perf );
 		} );
-	},
+	}
 	
-	get: function(url, options, callback) {
+	get(url, options, callback) {
 		// perform HTTP GET
 		// callback will receive: err, res, data
 		if (!callback) {
@@ -240,9 +249,9 @@ module.exports = Class.create({
 		if (!options) options = {};
 		if (!options.method) options.method = 'GET';
 		this.request( url, options, callback );
-	},
+	}
 	
-	head: function(url, options, callback) {
+	head(url, options, callback) {
 		// perform HTTP HEAD
 		// callback will receive: err, res, data
 		if (!callback) {
@@ -253,9 +262,9 @@ module.exports = Class.create({
 		if (!options) options = {};
 		if (!options.method) options.method = 'HEAD';
 		this.request( url, options, callback );
-	},
+	}
 	
-	post: function(url, options, callback) {
+	post(url, options, callback) {
 		// perform HTTP POST, raw data or key/value pairs
 		// callback will receive: err, res, data
 		var key;
@@ -329,7 +338,7 @@ module.exports = Class.create({
 							// simple file path, convert to readable stream
 							form.append( key, fs.createReadStream(file) );
 						}
-						else if (isArray(file)) {
+						else if (Array.isArray(file)) {
 							// array of [file path or stream or buffer, filename]
 							var file_data = file[0];
 							if (typeof(file_data) == 'string') file_data = fs.createReadStream(file_data);
@@ -356,9 +365,9 @@ module.exports = Class.create({
 		} // serialize data
 		
 		this.request( url, options, callback );
-	},
+	}
 	
-	put: function(url, options, callback) {
+	put(url, options, callback) {
 		// perform HTTP PUT
 		// callback will receive: err, res, data
 		if (!callback) {
@@ -369,9 +378,9 @@ module.exports = Class.create({
 		if (!options) options = {};
 		if (!options.method) options.method = 'PUT';
 		this.post( url, options, callback );
-	},
+	}
 	
-	delete: function(url, options, callback) {
+	delete(url, options, callback) {
 		// perform HTTP DELETE
 		// callback will receive: err, res, data
 		if (!callback) {
@@ -382,9 +391,9 @@ module.exports = Class.create({
 		if (!options) options = {};
 		if (!options.method) options.method = 'DELETE';
 		this.post( url, options, callback );
-	},
+	}
 	
-	request: function(url, options, callback) {
+	request(url, options, callback) {
 		// low-level request sender
 		// callback will receive: err, res, data, perf
 		var self = this;
@@ -806,7 +815,7 @@ module.exports = Class.create({
 			timer = setTimeout( function() {
 				if (!aborted) {
 					aborted = true;
-					req.abort();
+					req.destroy();
 					if (callback && !callback_fired) {
 						// check for retry
 						if (retries) {
@@ -848,9 +857,9 @@ module.exports = Class.create({
 			}
 		}
 		else req.end();
-	},
+	}
 	
-	finishPerf: function(perf) {
+	finishPerf(perf) {
 		// finalize perf, adjust metrics and total
 		// order: dns, connect, send, wait, receive, decompress
 		var p = perf.perf;
