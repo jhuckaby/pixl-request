@@ -413,6 +413,20 @@ class Request {
 		var perf = new Perf();
 		perf.begin();
 		
+		// default headers
+		if (!options.headers) options.headers = {};
+		for (key in this.defaultHeaders) {
+			if (!(key in options.headers)) {
+				options.headers[key] = this.defaultHeaders[key];
+			}
+		}
+		
+		// allow URL to include headers e.g. [header: Cookie: foo=bar]
+		url = url.replace(/\s*\[header\:\s*([\w\-]+)\:\s*([^\]]+)\]/ig, function(m_all, m_g1, m_g2) {
+			options.headers[ m_g1 ] = m_g2;
+			return '';
+		}).trim();
+		
 		// parse url into parts
 		var parts = require('url').parse(url);
 		
@@ -440,20 +454,6 @@ class Request {
 			options.agent = false;
 			options.keepAlive = false;
 		}
-		
-		// default headers
-		if (!options.headers) options.headers = {};
-		for (key in this.defaultHeaders) {
-			if (!(key in options.headers)) {
-				options.headers[key] = this.defaultHeaders[key];
-			}
-		}
-		
-		// allow URL to include headers e.g. [header: Cookie: foo=bar]
-		url = url.replace(/\s*\[header\:\s*([\w\-]+)\:\s*([^\]]+)\]/ig, function(m_all, m_g1, m_g2) {
-			options.headers[ m_g1 ] = m_g2;
-			return '';
-		}).trim();
 		
 		// possibly use dns cache
 		if (this.dnsTTL && dns_cache[options.hostname]) {
