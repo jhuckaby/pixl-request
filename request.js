@@ -38,8 +38,9 @@ module.exports = Class({
 	
 	defaultHeaders: null,
 	
-	// default socket idle timeout of 30 seconds
+	// default TTFB timeout of 30 seconds
 	defaultTimeout: 30000,
+	idleTimeout: 30000,
 	
 	// do not follow redirects by default
 	defaultFollow: false,
@@ -90,8 +91,12 @@ class Request {
 	}
 	
 	setTimeout(timeout) {
-		// override the default socket idle timeout (milliseconds)
+		// override the default first-byte timeout (milliseconds)
 		this.defaultTimeout = timeout;
+	}
+	setIdleTimeout(timeout) {
+		// override the default socket idle timeout (milliseconds)
+		this.defaultIdleTimeout = timeout;
 	}
 	
 	setFollow(follow) {
@@ -400,6 +405,7 @@ class Request {
 		var callback_fired = false;
 		var timer = null;
 		var socket = null;
+		var req = null;
 		var key;
 		if (!options) options = {};
 		else {
@@ -501,6 +507,11 @@ class Request {
 			timeout = options.timeout;
 			delete options.timeout;
 		}
+		var idleTimeout = this.defaultIdleTimeout;
+		if ('idleTimeout' in options) {
+			idleTimeout = options.idleTimeout;
+			delete options.idleTimeout;
+		}
 		
 		// optionally follow redirects
 		var follow = this.defaultFollow;
@@ -514,6 +525,13 @@ class Request {
 		if ('retries' in options) {
 			retries = options.retries;
 			delete options.retries;
+		}
+		
+		// optional progress events
+		var progress = null;
+		if ('progress' in options) {
+			progress = options.progress;
+			delete options.progress;
 		}
 		
 		// stream mode
@@ -537,8 +555,13 @@ class Request {
 			}
 			delete options.download;
 		}
-		if ('pre_download' in options) {
+		if ('preflight' in options) {
 			// special callback to handle raw stream
+			pre_download = options.preflight;
+			delete options.preflight;
+		}
+		if ('pre_download' in options) {
+			// legacy API, keep for compat
 			pre_download = options.pre_download;
 			delete options.pre_download;
 		}
@@ -555,23 +578,69 @@ class Request {
 			}
 		}
 		
+		// handle timeouts
+		var receivedPacket = false;
+		var handleTimeout = function(msg, ms) {
+			if (receivedPacket && idleTimeout) {
+				// data received since last timeout, reset timer
+				receivedPacket = false;
+				timer = setTimeout( function() { handleTimeout(msg, ms); }, idleTimeout );
+				return;
+			}
+			if (!aborted) {
+				aborted = true;
+				req.destroy();
+				if (callback && !callback_fired) {
+					// check for retry
+					if (retries) {
+						// revert options to original state
+						options.timeout = timeout;
+						options.idleTimeout = idleTimeout;
+						options.follow = follow;
+						options.download = download;
+						options.preflight = pre_download;
+						options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
+						options.progress = progress;
+						
+						delete options.hostname;
+						delete options.port;
+						delete options.path;
+						delete options.auth;
+						
+						if (post_data !== null) options.data = post_data;
+						
+						// recurse into self for retry
+						callback_fired = true; // prevent firing twice
+						self.request( url, options, callback );
+						return;
+					}
+					
+					callback_fired = true;
+					callback( new Error(msg + " (" + ms + " ms)"), null, null, self.finishPerf(perf) );
+				}
+			}
+		}; // timeout
+		
 		// construct request object
 		var proto_class = (parts.protocol == 'https:') ? https : http;
-		var req = proto_class.request( options, function(res) {
+		req = proto_class.request( options, function(res) {
 			// got response headers
 			perf.end('wait', perf.perf.total.start);
 			
 			// clear initial timeout (first byte received)
 			if (timer) { clearTimeout(timer); timer = null; }
+			if (idleTimeout) timer = setTimeout( function() { handleTimeout('Idle Timeout', idleTimeout); }, idleTimeout );
 			
 			// check for auto-redirect
 			if (follow && res.statusCode.toString().match(self.followMatch) && res.headers['location']) {
 				// revert options to original state
 				options.timeout = timeout;
+				options.idleTimeout = idleTimeout;
 				options.follow = (typeof(follow) == 'number') ? (follow - 1) : follow;
 				options.download = download;
-				options.pre_download = pre_download;
+				options.preflight = pre_download;
 				options.retries = retries;
+				options.progress = progress;
 				
 				delete options.hostname;
 				delete options.port;
@@ -581,6 +650,7 @@ class Request {
 				if (post_data !== null) options.data = post_data;
 				
 				// recurse into self for redirect
+				if (timer) { clearTimeout(timer); timer = null; }
 				callback_fired = true; // prevent firing twice
 				self.request( res.headers['location'], options, callback );
 				return;
@@ -590,10 +660,12 @@ class Request {
 			if (retries && res.statusCode.toString().match(self.retryMatch)) {
 				// revert options to original state
 				options.timeout = timeout;
+				options.idleTimeout = idleTimeout;
 				options.follow = follow;
 				options.download = download;
-				options.pre_download = pre_download;
+				options.preflight = pre_download;
 				options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
+				options.progress = progress;
 				
 				delete options.hostname;
 				delete options.port;
@@ -603,6 +675,7 @@ class Request {
 				if (post_data !== null) options.data = post_data;
 				
 				// recurse into self for retry
+				if (timer) { clearTimeout(timer); timer = null; }
 				callback_fired = true; // prevent firing twice
 				self.request( url, options, callback );
 				return;
@@ -619,7 +692,14 @@ class Request {
 				// stream content to a pipe
 				var decompressor = null;
 				
+				res.on('data', function (chunk) {
+					// reset dead man's switch for idle timeout
+					receivedPacket = true;
+					if (progress) progress(chunk, res);
+				} );
+				
 				download.on('finish', function() {
+					if (timer) { clearTimeout(timer); timer = null; }
 					perf.end('receive', perf.perf.total.start);
 					if (callback && !callback_fired) {
 						callback_fired = true;
@@ -667,10 +747,13 @@ class Request {
 					// got chunk of data
 					chunks.push( chunk );
 					total_bytes += chunk.length;
+					receivedPacket = true;
+					if (progress) progress(chunk, res);
 				} );
 				
 				res.on('end', function() {
 					// end of response
+					if (timer) { clearTimeout(timer); timer = null; }
 					perf.end('receive', perf.perf.total.start);
 					if (socket) {
 						perf.count('bytes_sent', (socket.bytesWritten || 0) - (socket._pixl_orig_bytes_written || 0));
@@ -785,10 +868,12 @@ class Request {
 					if (retries) {
 						// revert options to original state
 						options.timeout = timeout;
+						options.idleTimeout = idleTimeout;
 						options.follow = follow;
 						options.download = download;
-						options.pre_download = pre_download;
+						options.preflight = pre_download;
 						options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
+						options.progress = progress;
 						
 						delete options.hostname;
 						delete options.port;
@@ -812,38 +897,7 @@ class Request {
 		if (timeout) {
 			// set initial socket timeout which aborts the request
 			// this is cleared at first byte, then we rely on the socket idle timeout
-			timer = setTimeout( function() {
-				if (!aborted) {
-					aborted = true;
-					req.destroy();
-					if (callback && !callback_fired) {
-						// check for retry
-						if (retries) {
-							// revert options to original state
-							options.timeout = timeout;
-							options.follow = follow;
-							options.download = download;
-							options.pre_download = pre_download;
-							options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
-							
-							delete options.hostname;
-							delete options.port;
-							delete options.path;
-							delete options.auth;
-							
-							if (post_data !== null) options.data = post_data;
-							
-							// recurse into self for retry
-							callback_fired = true; // prevent firing twice
-							self.request( url, options, callback );
-							return;
-						}
-						
-						callback_fired = true;
-						callback( new Error("Socket Timeout ("+timeout+" ms)"), null, null, self.finishPerf(perf) );
-					}
-				}
-			}, timeout );
+			timer = setTimeout( function() { handleTimeout('Request Timeout', timeout); }, timeout );
 		}
 		
 		if (post_data !== null) {

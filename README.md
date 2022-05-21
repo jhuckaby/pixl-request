@@ -18,6 +18,7 @@ This module is a very simple wrapper around Node's built-in [http](https://nodej
 	* [HTTP DELETE](#http-delete)
 	* [File Downloads](#file-downloads)
 		+ [Advanced Stream Control](#advanced-stream-control)
+	* [Progress Updates](#progress-updates)
 	* [Keep-Alives](#keep-alives)
 	* [JSON REST API](#json-rest-api)
 	* [XML REST API](#xml-rest-api)
@@ -734,7 +735,7 @@ function(err, resp, data, perf) {
 
 ### Advanced Stream Control
 
-If you need more control over the response stream, you can provide a `pre_download` property in your `options` object, passed to either `get()` or `post()`.  Set this property to a callback function, which will be called *before* the data is downloaded, but *after* the HTTP response headers are parsed.  This allows you to essentially intercept the response and set up your own stream pipe.  Example:
+If you need more control over the response stream, you can provide a `preflight` property in your `options` object, passed to either `get()` or `post()`.  Set this property to a callback function, which will be called *before* the data is downloaded, but *after* the HTTP response headers are parsed.  This allows you to essentially intercept the response and set up your own stream pipe.  Example:
 
 ```js
 let stream = fs.createWriteStream( '/var/tmp/myimage.jpg' );
@@ -742,7 +743,7 @@ let stream = fs.createWriteStream( '/var/tmp/myimage.jpg' );
 try {
 	let { resp, perf } = await request.get( 'https://upload.wikimedia.org/wikipedia/commons/9/9b/Gustav_chocolate.jpg', {
 		"download": stream,
-		"pre_download": function(err, resp) {
+		"preflight": function(err, resp) {
 			// setup stream pipe ourselves
 			resp.pipe( stream );
 			return true;
@@ -764,7 +765,7 @@ let stream = fs.createWriteStream( '/var/tmp/myimage.jpg' );
 
 request.get( 'https://upload.wikimedia.org/wikipedia/commons/9/9b/Gustav_chocolate.jpg', {
 	"download": stream,
-	"pre_download": function(err, resp) {
+	"preflight": function(err, resp) {
 		// setup stream pipe ourselves
 		resp.pipe( stream );
 		return true;
@@ -780,7 +781,51 @@ function(err, resp, data, perf) {
 
 </details>
 
-Your `pre_download` function can optionally return `false`, which will inform the library that you did not set up a stream pipe, and it should resolve the promise with a data buffer instead.
+Your `preflight` function can optionally return `false`, which will inform the library that you did not set up a stream pipe, and it should resolve the promise with a data buffer instead.
+
+## Progress Updates
+
+If you would like to receive progress updates during a file download or large data transfer, add a `progress` property to your options object, and set it to a callback function.  Your function will be called repeatedly during the data transfer, and be passed the current data chunk as a buffer, and the HTTP response object from Node ([IncomingMessage](https://nodejs.org/api/http.html#class-httpincomingmessage)).  Example use:
+
+```js
+try {
+	let { resp, perf } = await request.get( 'https://upload.wikimedia.org/wikipedia/commons/9/9b/Gustav_chocolate.jpg', {
+		"download": "/var/tmp/myimage.jpg"
+		"progress": function(chunk, resp) {
+			// called repeatedly during download
+			console.log( "Got chunk, " + chunk.length + " bytes" );
+		}
+	});
+	console.log("Status: " + resp.statusCode + ' ' + resp.statusMessage);
+	console.log("Headers: ", resp.headers);
+	console.log("Performance: ", perf.metrics());
+}
+catch (err) {
+	throw err;
+}
+```
+
+<details><summary><strong>Example using callback</strong></summary>
+
+```js
+request.get( 'https://upload.wikimedia.org/wikipedia/commons/9/9b/Gustav_chocolate.jpg', {
+	"download": "/var/tmp/myimage.jpg",
+	"progress": function(chunk, resp) {
+			// called continuously during download
+			console.log( "Got chunk, " + chunk.length + " bytes of " + resp.headers['content-length'] );
+		}
+}, 
+function(err, resp, data, perf) {
+	if (err) throw err;
+	console.log("Status: " + resp.statusCode + ' ' + resp.statusMessage);
+	console.log("Headers: ", resp.headers);
+	console.log("Performance: ", perf.metrics());
+} );
+```
+
+</details>
+
+Note that progress events only fire on data *received* (i.e. downloaded).
 
 ## Keep-Alives
 
@@ -1331,9 +1376,9 @@ request.defaultHeaders = {
 
 # Handling Timeouts
 
-PixlRequest handles timeouts by measuring the "time to first byte", from the start of the request.  This is *not* an idle timeout, and *not* a connect timeout.  It is simply the maximum amount of time allowed from the start of the request, to the first byte received.  The Node.js [socket.setTimeout()](https://nodejs.org/api/net.html#net_socket_settimeout_timeout_callback) method is not used, because we have found it to be totally unreliable, especially with Keep-Alives.
+PixlRequest handles timeouts in two different ways.  First, by measuring the "time to first byte" (TTFB), from the start of the request.  This is *not* an idle timeout, and *not* a connect timeout -- it is the maximum amount of time allowed from the start of the request, to the first byte received.  Separately, it also can track an idle timeout *after* the first byte has been received.  You can set each timeout separately.
 
-The default socket timeout for all requests is 30 seconds.  You can customize this per request by including a `timeout` property with your options object, and setting it to the number of milliseconds you want:
+The default TTFB timeout and idle timeout for all requests is 30 seconds.  You can customize this per request by including `timeout` and/or `idleTimeout` properties with your options object, and setting them to a number of milliseconds:
 
 ```js
 try {
@@ -1343,7 +1388,8 @@ try {
 			"gender": "male",
 			"age": 35
 		},
-		"timeout": 10 * 1000, // 10 second timeout
+		"timeout": 10 * 1000, // 10 second TTFB timeout
+		"idleTimeout": 5 * 1000 // 5 second idle timeout
 	});
 	console.log("Status: " + resp.statusCode + ' ' + resp.statusMessage);
 	console.log("Headers: ", resp.headers);
@@ -1364,7 +1410,8 @@ request.post( 'http://myserver.com/api/post', {
 		"gender": "male",
 		"age": 35
 	},
-	"timeout": 10 * 1000, // 10 second timeout
+	"timeout": 10 * 1000, // 10 second TTFB timeout
+	"idleTimeout": 5 * 1000 // 5 second idle timeout
 }, 
 function(err, resp, data, perf) {
 	if (err) throw err;
@@ -1377,13 +1424,21 @@ function(err, resp, data, perf) {
 
 </details>
 
-Or by resetting the default on your class instance, using the `setTimeout()` method:
+Or you can set default timeouts for all requests on your class instance, using the `setTimeout()` and `setIdleTimeout()` methods:
 
 ```js
 request.setTimeout( 10 * 1000 ); // 10 seconds
+request.setIdleTimeout( 5 * 1000 ); // 5 seconds
 ```
 
-When a timeout occurs, an `error` event is emitted.  The error message will follow this syntax: `Socket Timeout (### ms)`.  Note that a socket timeout results in the socket being destroyed ([request.destroy()](https://nodejs.org/api/http.html#requestdestroyerror) is called on the request object, which in turn destroys the socket).
+When a timeout occurs, an `error` event is emitted.  The error message will follow one of these formats, depending on which timeout was fired: 
+
+```
+Request Timeout (### ms)
+Idle Timeout (### ms)
+```
+
+Note that any timeout results in the socket being destroyed (i.e. [request.destroy()](https://nodejs.org/api/http.html#requestdestroyerror) is called on the request object, which in turn destroys the socket).
 
 # Automatic Redirects
 
