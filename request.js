@@ -649,6 +649,10 @@ class Request {
 				
 				if (post_data !== null) options.data = post_data;
 				
+				// allow original request to finish
+				res.on('data', function () {} );
+				res.on('end', function() {} );
+				
 				// recurse into self for redirect
 				if (timer) { clearTimeout(timer); timer = null; }
 				callback_fired = true; // prevent firing twice
@@ -673,6 +677,10 @@ class Request {
 				delete options.auth;
 				
 				if (post_data !== null) options.data = post_data;
+				
+				// allow original request to finish
+				res.on('data', function () {} );
+				res.on('end', function() {} );
 				
 				// recurse into self for retry
 				if (timer) { clearTimeout(timer); timer = null; }
