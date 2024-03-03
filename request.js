@@ -13,6 +13,7 @@ const XML = require('pixl-xml');
 const Class = require('class-plus');
 const Perf = require('pixl-perf');
 const ErrNo = require('errno');
+const { Throttle } = require('speed-limiter');
 
 // sniff for Brotli compression support, as it was added in Node v10.16
 const hasBrotli = !!zlib.BrotliCompress;
@@ -566,6 +567,11 @@ class Request {
 			delete options.pre_download;
 		}
 		
+		// rate-limit system
+		var throttle_up = new Throttle({ rate: options.rate || 0, enabled: !!options.rate });
+		var throttle_down = new Throttle({ rate: options.rate || 0, enabled: !!options.rate });
+		delete options.rate;
+		
 		// reject bad characters in headers, which can crash node's writeHead() call
 		for (var key in options.headers) {
 			if (!checkIsHttpToken(key)) {
@@ -696,11 +702,14 @@ class Request {
 				err.code = res.statusCode;
 			}
 			
+			// use throttle_down stream from here on in
+			res.pipe( throttle_down );
+			
 			if (download) {
 				// stream content to a pipe
 				var decompressor = null;
 				
-				res.on('data', function (chunk) {
+				throttle_down.on('data', function (chunk) {
 					// reset dead man's switch for idle timeout
 					receivedPacket = true;
 					if (progress) progress(chunk, res);
@@ -727,23 +736,23 @@ class Request {
 					// brotli stream
 					decompressor = zlib.createBrotliDecompress();
 					decompressor.on('error', function(err) { /* no-op */ });
-					res.pipe( decompressor ).pipe( download );
+					throttle_down.pipe( decompressor ).pipe( download );
 				}
 				else if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i)) {
 					// gunzip stream
 					decompressor = zlib.createGunzip();
 					decompressor.on('error', function(err) { /* no-op */ });
-					res.pipe( decompressor ).pipe( download );
+					throttle_down.pipe( decompressor ).pipe( download );
 				}
 				else if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bdeflate\b/i)) {
 					// inflate stream
 					decompressor = zlib.createInflate();
 					decompressor.on('error', function(err) { /* no-op */ });
-					res.pipe( decompressor ).pipe( download );
+					throttle_down.pipe( decompressor ).pipe( download );
 				}
 				else {
 					// response is not encoded
-					res.pipe( download );
+					throttle_down.pipe( download );
 				}
 			} // stream mode
 			
@@ -751,7 +760,7 @@ class Request {
 				var chunks = [];
 				var total_bytes = 0;
 				
-				res.on('data', function (chunk) {
+				throttle_down.on('data', function (chunk) {
 					// got chunk of data
 					chunks.push( chunk );
 					total_bytes += chunk.length;
@@ -759,7 +768,7 @@ class Request {
 					if (progress) progress(chunk, res);
 				} );
 				
-				res.on('end', function() {
+				throttle_down.on('end', function() {
 					// end of response
 					if (timer) { clearTimeout(timer); timer = null; }
 					perf.end('receive', perf.perf.total.start);
@@ -910,7 +919,7 @@ class Request {
 		
 		if (post_data !== null) {
 			// write post data to socket
-			if (is_form) post_data.pipe( req );
+			if (is_form) post_data.pipe(throttle_up).pipe( req );
 			else {
 				// Note: Sending data with req.end() prevents chunked transfer encoding
 				req.end( post_data );

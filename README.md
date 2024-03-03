@@ -28,6 +28,7 @@ This module is a very simple wrapper around Node's built-in [http](https://nodej
 - [Automatic Errors](#automatic-errors)
 - [Automatic Retries](#automatic-retries)
 - [Compressed Responses](#compressed-responses)
+- [Rate Limiting](#rate-limiting)
 - [Performance Metrics](#performance-metrics)
 - [DNS Caching](#dns-caching)
 	* [Flushing the Cache](#flushing-the-cache)
@@ -1535,6 +1536,54 @@ Alternately, if you would prefer that the library not do anything regarding comp
 ```js
 request.setAutoDecompress( false );
 ```
+
+# Rate Limiting
+
+To rate-limit a request (i.e. enforce a maximum network throughput), include a `rate` property in your options object, and set it to the desired bytes per second.  Example:
+
+```js
+try {
+	let { resp, data, perf } = await request.post( 'http://myserver.com/api/post', {
+		"data": {
+			"full_name": "Fred Smith", 
+			"gender": "male",
+			"age": 35
+		},
+		"rate": 1024 * 100 // 100K/sec max limit
+	});
+	console.log("Status: " + resp.statusCode + ' ' + resp.statusMessage);
+	console.log("Headers: ", resp.headers);
+	console.log("Content: ", data);
+	console.log("Performance: ", perf.metrics());
+}
+catch (err) {
+	throw err;
+}
+```
+
+<details><summary><strong>Example using callback</strong></summary>
+
+```js
+request.post( 'http://myserver.com/api/post', {
+	"data": {
+		"full_name": "Fred Smith", 
+		"gender": "male",
+		"age": 35
+	},
+	"rate": 1024 * 100 // 100K/sec max limit
+}, 
+function(err, resp, data, perf) {
+	if (err) throw err;
+	console.log("Status: " + resp.statusCode + ' ' + resp.statusMessage);
+	console.log("Headers: ", resp.headers);
+	console.log("Content: ", data);
+	console.log("Performance: ", perf.metrics());
+} );
+```
+
+</details>
+
+Rate-limiting is applied to both upstream and downstream data.  However, note that limiting upstream data only works for [multi-part requests](#multipart-post) and [file uploads](#file-uploads).
 
 # Performance Metrics
 
