@@ -1033,6 +1033,24 @@ module.exports = {
 			);
 		},
 		
+		// abort controller
+		function testStaticBinaryRequestAbort(test) {
+			// test simple HTTP GET to webserver backend
+			var ac = new AbortController();
+			var opts = {
+				signal: ac.signal
+			};
+			request.get( 'http://127.0.0.1:3020/spacer.gif', opts,
+				function(err, resp, data, perf) {
+					test.ok( !!err, "Expected error from PixlRequest" );
+					test.done();
+				} 
+			);
+			
+			// abort right away
+			ac.abort();
+		},
+		
 		// static range request
 		function testStaticRangeRequest(test) {
 			// test ranged HTTP GET to webserver backend

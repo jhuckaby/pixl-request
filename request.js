@@ -572,6 +572,10 @@ class Request {
 		var throttle_down = new Throttle({ rate: options.rate || 0, enabled: !!options.rate });
 		delete options.rate;
 		
+		// abort controller
+		var signal = options.signal || null;
+		delete options.signal;
+		
 		// reject bad characters in headers, which can crash node's writeHead() call
 		for (var key in options.headers) {
 			if (!checkIsHttpToken(key)) {
@@ -700,6 +704,19 @@ class Request {
 			if (self.autoError && !res.statusCode.toString().match(self.successMatch)) {
 				err = new Error( "HTTP " + res.statusCode + " " + res.statusMessage );
 				err.code = res.statusCode;
+			}
+			
+			// abort controller
+			if (signal) {
+				var aborter = function() {
+					if (aborted || callback_fired) return;
+					aborted = true;
+					callback_fired = true;
+					req.abort();
+					callback( new Error("Request Aborted"), res, null, self.finishPerf(perf) );
+				};
+				signal.addEventListener('abort', aborter, { once: true });
+				if (signal.aborted) aborter();
 			}
 			
 			// use throttle_down stream from here on in

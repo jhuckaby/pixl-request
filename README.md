@@ -29,6 +29,7 @@ This module is a very simple wrapper around Node's built-in [http](https://nodej
 - [Automatic Retries](#automatic-retries)
 - [Compressed Responses](#compressed-responses)
 - [Rate Limiting](#rate-limiting)
+- [Abort Signals](#abort-signals)
 - [Performance Metrics](#performance-metrics)
 - [DNS Caching](#dns-caching)
 	* [Flushing the Cache](#flushing-the-cache)
@@ -1543,17 +1544,11 @@ To rate-limit a request (i.e. enforce a maximum network throughput), include a `
 
 ```js
 try {
-	let { resp, data, perf } = await request.post( 'http://myserver.com/api/post', {
-		"data": {
-			"full_name": "Fred Smith", 
-			"gender": "male",
-			"age": 35
-		},
+	let { resp, data, perf } = await request.get( 'http://myserver.com/some/large/file.mp4', {
 		"rate": 1024 * 100 // 100K/sec max limit
 	});
 	console.log("Status: " + resp.statusCode + ' ' + resp.statusMessage);
 	console.log("Headers: ", resp.headers);
-	console.log("Content: ", data);
 	console.log("Performance: ", perf.metrics());
 }
 catch (err) {
@@ -1564,19 +1559,13 @@ catch (err) {
 <details><summary><strong>Example using callback</strong></summary>
 
 ```js
-request.post( 'http://myserver.com/api/post', {
-	"data": {
-		"full_name": "Fred Smith", 
-		"gender": "male",
-		"age": 35
-	},
+request.get( 'http://myserver.com/some/large/file.mp4', {
 	"rate": 1024 * 100 // 100K/sec max limit
 }, 
 function(err, resp, data, perf) {
 	if (err) throw err;
 	console.log("Status: " + resp.statusCode + ' ' + resp.statusMessage);
 	console.log("Headers: ", resp.headers);
-	console.log("Content: ", data);
 	console.log("Performance: ", perf.metrics());
 } );
 ```
@@ -1584,6 +1573,58 @@ function(err, resp, data, perf) {
 </details>
 
 Rate-limiting is applied to both upstream and downstream data.  However, note that limiting upstream data only works for [multi-part requests](#multipart-post) and [file uploads](#file-uploads).
+
+# Abort Signals
+
+If you have a long-running request that you may want to abort in the middle, you can use a Node.js [AbortController](https://nodejs.org/api/globals.html#class-abortcontroller).  Just pass in the `signal` property from your controller into the request options object, and then you can call `abort()` on the controller whenever you want.  Example:
+
+```js
+const controller = new AbortController();
+
+// abort after 500ms
+setTimeout( function() {
+	controller.abort();
+}, 500 );
+
+// send long request
+try {
+	let { resp, data, perf } = await request.get( 'http://myserver.com/some/large/file.mp4', {
+		"signal": controller.signal // our abort signal here
+	});
+	console.log("Status: " + resp.statusCode + ' ' + resp.statusMessage);
+	console.log("Headers: ", resp.headers);
+	console.log("Performance: ", perf.metrics());
+}
+catch (err) {
+	throw err;
+}
+```
+
+<details><summary><strong>Example using callback</strong></summary>
+
+```js
+const controller = new AbortController();
+
+// abort after 500ms
+setTimeout( function() {
+	controller.abort();
+}, 500 );
+
+// send long request
+request.get( 'http://myserver.com/some/large/file.mp4', {
+	"signal": controller.signal // our abort signal here
+}, 
+function(err, resp, data, perf) {
+	if (err) throw err;
+	console.log("Status: " + resp.statusCode + ' ' + resp.statusMessage);
+	console.log("Headers: ", resp.headers);
+	console.log("Performance: ", perf.metrics());
+} );
+```
+
+</details>
+
+Note that abort signals are designed to abort requests that have already received the "first byte".  Meaning, we already received the response headers, and are streaming down the data.  That's the phase of the request that is "abortable".
 
 # Performance Metrics
 
