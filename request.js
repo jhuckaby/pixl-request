@@ -568,8 +568,9 @@ class Request {
 		}
 		
 		// rate-limit system
-		var throttle_up = new Throttle({ rate: options.rate || 0, enabled: !!options.rate });
-		var throttle_down = new Throttle({ rate: options.rate || 0, enabled: !!options.rate });
+		var rate = options.rate || 0;
+		var throttle_up = new Throttle({ rate: rate, enabled: !!rate });
+		var throttle_down = new Throttle({ rate: rate, enabled: !!rate });
 		delete options.rate;
 		
 		// abort controller
@@ -611,6 +612,8 @@ class Request {
 						options.preflight = pre_download;
 						options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
 						options.progress = progress;
+						options.rate = rate;
+						options.signal = signal;
 						
 						delete options.hostname;
 						delete options.port;
@@ -651,6 +654,8 @@ class Request {
 				options.preflight = pre_download;
 				options.retries = retries;
 				options.progress = progress;
+				options.rate = rate;
+				options.signal = signal;
 				
 				delete options.hostname;
 				delete options.port;
@@ -680,6 +685,8 @@ class Request {
 				options.preflight = pre_download;
 				options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
 				options.progress = progress;
+				options.rate = rate;
+				options.signal = signal;
 				
 				delete options.hostname;
 				delete options.port;
@@ -908,6 +915,8 @@ class Request {
 						options.preflight = pre_download;
 						options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
 						options.progress = progress;
+						options.rate = rate;
+						options.signal = signal;
 						
 						delete options.hostname;
 						delete options.port;
