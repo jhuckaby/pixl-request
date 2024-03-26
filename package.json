@@ -1,6 +1,6 @@
 {
 	"name": "pixl-request",
-	"version": "2.1.2",
+	"version": "2.1.3",
 	"description": "A very simple module for making HTTP requests.",
 	"author": "Joseph Huckaby <jhuckaby@gmail.com>",
 	"homepage": "https://github.com/jhuckaby/pixl-request",
@@ -35,6 +35,6 @@
 		"pixl-server-web": "^1.3.25"
 	},
 	"scripts": {
-		"test": "pixl-unit test/test.js"
+		"test": "pixl-unit test/test.js --verbose"
 	}
 }

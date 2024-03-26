@@ -858,44 +858,8 @@ class Request {
 			
 		} ); // request
 		
-		req.on('socket', function(sock) {
-			// hook some socket events once we have a reference to it
-			socket = sock;
-			
-			if (!socket._pixl_request_hooked) {
-				socket._pixl_request_hooked = true;
-				
-				// Disable the Nagle algorithm.
-				socket.setNoDelay( true );
-				
-				socket.once('lookup', function(err, address, family, hostname) {
-					// track DNS lookup time
-					perf.end('dns', perf.perf.total.start);
-					
-					// possibly cache IP for future lookups
-					if (self.dnsTTL) {
-						dns_cache[ options.hostname ] = {
-							ip: address,
-							expires: ((new Date()).getTime() / 1000) + self.dnsTTL
-						};
-					}
-				} );
-				
-				socket.once('connect', function() {
-					// track socket connect time
-					perf.end('connect', perf.perf.total.start);
-				} );
-				
-			} // not hooked
-		} ); // socket
-		
-		req.on('finish', function() {
-			// track data send time (only really works for POST/PUT)
-			perf.end('send', perf.perf.total.start);
-		} );
-		
-		req.on('error', function(e) {
-			// handle socket errors
+		var handleSocketError = function(e) {
+			// handle socket-related error
 			if (callback && !aborted) {
 				var msg = e.toString();
 				if (msg.match(/ENOTFOUND/)) msg = "DNS: Failed to lookup IP from hostname: " + options.hostname;
@@ -935,7 +899,47 @@ class Request {
 					callback( new Error(msg), null, null, self.finishPerf(perf) );
 				}
 			}
+		}; // handleSocketError
+		
+		req.on('socket', function(sock) {
+			// hook some socket events once we have a reference to it
+			socket = sock;
+			
+			if (!socket._pixl_request_hooked) {
+				socket._pixl_request_hooked = true;
+				
+				// Disable the Nagle algorithm.
+				socket.setNoDelay( true );
+				
+				socket.once('lookup', function(err, address, family, hostname) {
+					// track DNS lookup time
+					perf.end('dns', perf.perf.total.start);
+					
+					// possibly cache IP for future lookups
+					if (self.dnsTTL) {
+						dns_cache[ options.hostname ] = {
+							ip: address,
+							expires: ((new Date()).getTime() / 1000) + self.dnsTTL
+						};
+					}
+				} );
+				
+				socket.once('connect', function() {
+					// track socket connect time
+					perf.end('connect', perf.perf.total.start);
+				} );
+				
+				socket.on( 'error', handleSocketError );
+			} // not hooked
+		} ); // socket
+		
+		req.on('finish', function() {
+			// track data send time (only really works for POST/PUT)
+			perf.end('send', perf.perf.total.start);
 		} );
+		
+		// assume this is a socket error too
+		req.on('error', handleSocketError );
 		
 		if (timeout) {
 			// set initial socket timeout which aborts the request
