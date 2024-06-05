@@ -1761,7 +1761,7 @@ Please only do this if you understand the security ramifications, and *completel
 
 **The MIT License**
 
-*Copyright (c) 2015 - 2022 Joseph Huckaby.*
+*Copyright (c) 2015 - 2024 Joseph Huckaby.*
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
