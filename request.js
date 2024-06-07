@@ -636,6 +636,7 @@ class Request {
 						options.rate = rate;
 						options.signal = signal;
 						
+						delete options.protocol;
 						delete options.hostname;
 						delete options.port;
 						delete options.path;
@@ -679,6 +680,7 @@ class Request {
 				options.rate = rate;
 				options.signal = signal;
 				
+				delete options.protocol;
 				delete options.hostname;
 				delete options.port;
 				delete options.path;
@@ -710,6 +712,7 @@ class Request {
 				options.rate = rate;
 				options.signal = signal;
 				
+				delete options.protocol;
 				delete options.hostname;
 				delete options.port;
 				delete options.path;
@@ -904,6 +907,7 @@ class Request {
 						options.rate = rate;
 						options.signal = signal;
 						
+						delete options.protocol;
 						delete options.hostname;
 						delete options.port;
 						delete options.path;
