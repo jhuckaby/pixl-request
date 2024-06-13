@@ -931,6 +931,9 @@ class Request {
 			// hook some socket events once we have a reference to it
 			socket = sock;
 			
+			// try to prevent rare mystery unhandled exception errors
+			socket._hadError = true;
+			
 			if (!socket._pixl_request_hooked) {
 				socket._pixl_request_hooked = true;
 				
