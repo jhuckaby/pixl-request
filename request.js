@@ -656,9 +656,57 @@ class Request {
 			}
 		}; // timeout
 		
+		var handleSocketError = function(e) {
+			// handle socket-related error
+			if (callback && !aborted) {
+				var msg = e.toString();
+				if (msg.match(/ENOTFOUND/)) msg = "DNS: Failed to lookup IP from hostname: " + options.hostname;
+				else if (msg.match(/ECONNREFUSED/)) msg = "Connection Refused: Failed to connect to host: " + options.hostname;
+				else if (e.errno && ErrNo.code[e.errno]) {
+					msg = ucfirst(ErrNo.code[e.errno].description) + " (" + e.message + ")";
+				}
+				if (timer) { clearTimeout(timer); timer = null; }
+				if (!callback_fired) {
+					// check for retry
+					if (retries) {
+						// revert options to original state
+						options.timeout = timeout;
+						options.idleTimeout = idleTimeout;
+						options.follow = follow;
+						options.download = download;
+						options.preflight = pre_download;
+						options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
+						options.progress = progress;
+						options.rate = rate;
+						options.signal = signal;
+						
+						delete options.protocol;
+						delete options.hostname;
+						delete options.port;
+						delete options.path;
+						delete options.auth;
+						
+						if (post_data !== null) options.data = post_data;
+						
+						// recurse into self for retry
+						callback_fired = true; // prevent firing twice
+						self.request( url, options, callback );
+						return;
+					}
+					
+					callback_fired = true;
+					callback( new Error(msg), null, null, self.finishPerf(perf) );
+				}
+			}
+		}; // handleSocketError
+		
+		throttle_up.on('error', handleSocketError);
+		throttle_down.on('error', handleSocketError);
+		
 		// construct request object
 		req = request( options, function(res) {
 			// got response headers
+			res.on('error', handleSocketError);
 			if (req.destroyed) return;
 			
 			perf.end('wait', perf.perf.total.start);
@@ -882,50 +930,6 @@ class Request {
 			} // buffer mode
 			
 		} ); // request
-		
-		var handleSocketError = function(e) {
-			// handle socket-related error
-			if (callback && !aborted) {
-				var msg = e.toString();
-				if (msg.match(/ENOTFOUND/)) msg = "DNS: Failed to lookup IP from hostname: " + options.hostname;
-				else if (msg.match(/ECONNREFUSED/)) msg = "Connection Refused: Failed to connect to host: " + options.hostname;
-				else if (e.errno && ErrNo.code[e.errno]) {
-					msg = ucfirst(ErrNo.code[e.errno].description) + " (" + e.message + ")";
-				}
-				if (timer) { clearTimeout(timer); timer = null; }
-				if (!callback_fired) {
-					// check for retry
-					if (retries) {
-						// revert options to original state
-						options.timeout = timeout;
-						options.idleTimeout = idleTimeout;
-						options.follow = follow;
-						options.download = download;
-						options.preflight = pre_download;
-						options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
-						options.progress = progress;
-						options.rate = rate;
-						options.signal = signal;
-						
-						delete options.protocol;
-						delete options.hostname;
-						delete options.port;
-						delete options.path;
-						delete options.auth;
-						
-						if (post_data !== null) options.data = post_data;
-						
-						// recurse into self for retry
-						callback_fired = true; // prevent firing twice
-						self.request( url, options, callback );
-						return;
-					}
-					
-					callback_fired = true;
-					callback( new Error(msg), null, null, self.finishPerf(perf) );
-				}
-			}
-		}; // handleSocketError
 		
 		req.on('socket', function(sock) {
 			// hook some socket events once we have a reference to it
