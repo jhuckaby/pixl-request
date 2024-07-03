@@ -13,7 +13,6 @@ const XML = require('pixl-xml');
 const Class = require('class-plus');
 const Perf = require('pixl-perf');
 const ErrNo = require('errno');
-const { Throttle } = require('speed-limiter');
 
 // sniff for Brotli compression support, as it was added in Node v10.16
 const hasBrotli = !!zlib.BrotliCompress;
@@ -588,12 +587,6 @@ class Request {
 			delete options.pre_download;
 		}
 		
-		// rate-limit system
-		var rate = options.rate || 0;
-		var throttle_up = new Throttle({ rate: rate, enabled: !!rate });
-		var throttle_down = new Throttle({ rate: rate, enabled: !!rate });
-		delete options.rate;
-		
 		// abort controller
 		var signal = options.signal || null;
 		delete options.signal;
@@ -633,7 +626,6 @@ class Request {
 						options.preflight = pre_download;
 						options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
 						options.progress = progress;
-						options.rate = rate;
 						options.signal = signal;
 						
 						delete options.protocol;
@@ -659,6 +651,7 @@ class Request {
 		var handleSocketError = function(e) {
 			// handle socket-related error
 			if (callback && !aborted) {
+				aborted = true;
 				var msg = e.toString();
 				if (msg.match(/ENOTFOUND/)) msg = "DNS: Failed to lookup IP from hostname: " + options.hostname;
 				else if (msg.match(/ECONNREFUSED/)) msg = "Connection Refused: Failed to connect to host: " + options.hostname;
@@ -677,7 +670,6 @@ class Request {
 						options.preflight = pre_download;
 						options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
 						options.progress = progress;
-						options.rate = rate;
 						options.signal = signal;
 						
 						delete options.protocol;
@@ -699,9 +691,6 @@ class Request {
 				}
 			}
 		}; // handleSocketError
-		
-		throttle_up.on('error', handleSocketError);
-		throttle_down.on('error', handleSocketError);
 		
 		// construct request object
 		req = request( options, function(res) {
@@ -725,7 +714,6 @@ class Request {
 				options.preflight = pre_download;
 				options.retries = retries;
 				options.progress = progress;
-				options.rate = rate;
 				options.signal = signal;
 				
 				delete options.protocol;
@@ -757,7 +745,6 @@ class Request {
 				options.preflight = pre_download;
 				options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
 				options.progress = progress;
-				options.rate = rate;
 				options.signal = signal;
 				
 				delete options.protocol;
@@ -799,14 +786,11 @@ class Request {
 				if (signal.aborted) aborter();
 			}
 			
-			// use throttle_down stream from here on in
-			res.pipe( throttle_down );
-			
 			if (download) {
 				// stream content to a pipe
 				var decompressor = null;
 				
-				throttle_down.on('data', function (chunk) {
+				res.on('data', function (chunk) {
 					// reset dead man's switch for idle timeout
 					receivedPacket = true;
 					if (progress) progress(chunk, res);
@@ -833,23 +817,23 @@ class Request {
 					// brotli stream
 					decompressor = zlib.createBrotliDecompress();
 					decompressor.on('error', function(err) { /* no-op */ });
-					throttle_down.pipe( decompressor ).pipe( download );
+					res.pipe( decompressor ).pipe( download );
 				}
 				else if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i)) {
 					// gunzip stream
 					decompressor = zlib.createGunzip();
 					decompressor.on('error', function(err) { /* no-op */ });
-					throttle_down.pipe( decompressor ).pipe( download );
+					res.pipe( decompressor ).pipe( download );
 				}
 				else if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bdeflate\b/i)) {
 					// inflate stream
 					decompressor = zlib.createInflate();
 					decompressor.on('error', function(err) { /* no-op */ });
-					throttle_down.pipe( decompressor ).pipe( download );
+					res.pipe( decompressor ).pipe( download );
 				}
 				else {
 					// response is not encoded
-					throttle_down.pipe( download );
+					res.pipe( download );
 				}
 			} // stream mode
 			
@@ -857,7 +841,7 @@ class Request {
 				var chunks = [];
 				var total_bytes = 0;
 				
-				throttle_down.on('data', function (chunk) {
+				res.on('data', function (chunk) {
 					// got chunk of data
 					chunks.push( chunk );
 					total_bytes += chunk.length;
@@ -865,7 +849,7 @@ class Request {
 					if (progress) progress(chunk, res);
 				} );
 				
-				throttle_down.on('end', function() {
+				res.on('end', function() {
 					// end of response
 					if (timer) { clearTimeout(timer); timer = null; }
 					perf.end('receive', perf.perf.total.start);
@@ -935,9 +919,6 @@ class Request {
 			// hook some socket events once we have a reference to it
 			socket = sock;
 			
-			// try to prevent rare mystery unhandled exception errors
-			socket._hadError = true;
-			
 			if (!socket._pixl_request_hooked) {
 				socket._pixl_request_hooked = true;
 				
@@ -962,7 +943,8 @@ class Request {
 					perf.end('connect', perf.perf.total.start);
 				} );
 				
-				socket.on( 'error', handleSocketError );
+				// JH 2024-07-03 we should not need an error listener on the socket
+				// socket.on( 'error', handleSocketError );
 			} // not hooked
 		} ); // socket
 		
@@ -985,7 +967,7 @@ class Request {
 		
 		if (post_data !== null) {
 			// write post data to socket
-			if (is_form) post_data.pipe(throttle_up).pipe( req );
+			if (is_form) post_data.pipe( req );
 			else {
 				// Note: Sending data with req.end() prevents chunked transfer encoding
 				req.end( post_data );

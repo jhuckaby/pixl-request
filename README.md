@@ -1538,42 +1538,6 @@ Alternately, if you would prefer that the library not do anything regarding comp
 request.setAutoDecompress( false );
 ```
 
-# Rate Limiting
-
-To rate-limit a request (i.e. enforce a maximum network throughput), include a `rate` property in your options object, and set it to the desired bytes per second.  Example:
-
-```js
-try {
-	let { resp, data, perf } = await request.get( 'http://myserver.com/some/large/file.mp4', {
-		"rate": 1024 * 100 // 100K/sec max limit
-	});
-	console.log("Status: " + resp.statusCode + ' ' + resp.statusMessage);
-	console.log("Headers: ", resp.headers);
-	console.log("Performance: ", perf.metrics());
-}
-catch (err) {
-	throw err;
-}
-```
-
-<details><summary><strong>Example using callback</strong></summary>
-
-```js
-request.get( 'http://myserver.com/some/large/file.mp4', {
-	"rate": 1024 * 100 // 100K/sec max limit
-}, 
-function(err, resp, data, perf) {
-	if (err) throw err;
-	console.log("Status: " + resp.statusCode + ' ' + resp.statusMessage);
-	console.log("Headers: ", resp.headers);
-	console.log("Performance: ", perf.metrics());
-} );
-```
-
-</details>
-
-Rate-limiting is applied to both upstream and downstream data.  However, note that limiting upstream data only works for [multi-part requests](#multipart-post) and [file uploads](#file-uploads).
-
 # Abort Signals
 
 If you have a long-running request that you may want to abort in the middle, you can use a Node.js [AbortController](https://nodejs.org/api/globals.html#class-abortcontroller).  Just pass in the `signal` property from your controller into the request options object, and then you can call `abort()` on the controller whenever you want.  Example:
