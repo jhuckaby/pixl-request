@@ -441,6 +441,10 @@ class Request {
 		var perf = new Perf();
 		perf.begin();
 		
+		// import previous perf (from retry or redirect)
+		var old_perf = options.perf || null;
+		delete options.perf;
+		
 		// default headers
 		if (!options.headers) options.headers = {};
 		for (key in this.defaultHeaders) {
@@ -630,6 +634,9 @@ class Request {
 						options.progress = progress;
 						options.signal = signal;
 						
+						perf.count('retries', 1);
+						options.perf = self.finishPerf(perf, old_perf);
+						
 						delete options.protocol;
 						delete options.hostname;
 						delete options.port;
@@ -645,7 +652,7 @@ class Request {
 					}
 					
 					callback_fired = true;
-					callback( new Error(msg + " (" + ms + " ms)"), null, null, self.finishPerf(perf) );
+					callback( new Error(msg + " (" + ms + " ms)"), null, null, self.finishPerf(perf, old_perf) );
 				}
 			}
 		}; // timeout
@@ -674,6 +681,9 @@ class Request {
 						options.progress = progress;
 						options.signal = signal;
 						
+						perf.count('retries', 1);
+						options.perf = self.finishPerf(perf, old_perf);
+						
 						delete options.protocol;
 						delete options.hostname;
 						delete options.port;
@@ -689,7 +699,7 @@ class Request {
 					}
 					
 					callback_fired = true;
-					callback( new Error(msg), null, null, self.finishPerf(perf) );
+					callback( new Error(msg), null, null, self.finishPerf(perf, old_perf) );
 				}
 			}
 		}; // handleSocketError
@@ -717,6 +727,9 @@ class Request {
 				options.retries = retries;
 				options.progress = progress;
 				options.signal = signal;
+				
+				perf.count('redirects', 1);
+				options.perf = self.finishPerf(perf, old_perf);
 				
 				delete options.protocol;
 				delete options.hostname;
@@ -748,6 +761,9 @@ class Request {
 				options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
 				options.progress = progress;
 				options.signal = signal;
+				
+				perf.count('retries', 1);
+				options.perf = self.finishPerf(perf, old_perf);
 				
 				delete options.protocol;
 				delete options.hostname;
@@ -783,7 +799,7 @@ class Request {
 					aborted = true;
 					callback_fired = true;
 					req.abort();
-					callback( new Error("Request Aborted"), res, null, self.finishPerf(perf) );
+					callback( new Error("Request Aborted"), res, null, self.finishPerf(perf, old_perf) );
 				};
 				signal.addEventListener('abort', aborter, { once: true });
 				if (signal.aborted) aborter();
@@ -804,7 +820,7 @@ class Request {
 					perf.end('receive', perf.perf.total.start);
 					if (callback && !callback_fired) {
 						callback_fired = true;
-						callback( err, res, download, self.finishPerf(perf) );
+						callback( err, res, download, self.finishPerf(perf, old_perf) );
 					}
 				} );
 				
@@ -874,7 +890,7 @@ class Request {
 								perf.end('decompress', perf.perf.total.start);
 								if (!callback_fired) {
 									callback_fired = true;
-									callback( err || zerr, res, data, self.finishPerf(perf) );
+									callback( err || zerr, res, data, self.finishPerf(perf, old_perf) );
 								}
 							} );
 						}
@@ -884,7 +900,7 @@ class Request {
 								perf.end('decompress', perf.perf.total.start);
 								if (!callback_fired) {
 									callback_fired = true;
-									callback( err || zerr, res, data, self.finishPerf(perf) );
+									callback( err || zerr, res, data, self.finishPerf(perf, old_perf) );
 								}
 							} );
 						}
@@ -894,7 +910,7 @@ class Request {
 								perf.end('decompress', perf.perf.total.start);
 								if (!callback_fired) {
 									callback_fired = true;
-									callback( err || zerr, res, data, self.finishPerf(perf) );
+									callback( err || zerr, res, data, self.finishPerf(perf, old_perf) );
 								}
 							} );
 						}
@@ -902,7 +918,7 @@ class Request {
 							// response content is not encoded (or autoDecompress is false)
 							if (callback && !callback_fired) {
 								callback_fired = true;
-								callback( err, res, buf, self.finishPerf(perf) );
+								callback( err, res, buf, self.finishPerf(perf, old_perf) );
 							}
 						}
 					}
@@ -910,7 +926,7 @@ class Request {
 						// response content is empty
 						if (callback && !callback_fired) {
 							callback_fired = true;
-							callback( err, res, Buffer.alloc(0), self.finishPerf(perf) );
+							callback( err, res, Buffer.alloc(0), self.finishPerf(perf, old_perf) );
 						}
 					}
 				} ); // end
@@ -981,7 +997,7 @@ class Request {
 		else req.end();
 	}
 	
-	finishPerf(perf) {
+	finishPerf(perf, old_perf) {
 		// finalize perf, adjust metrics and total
 		// order: dns, connect, send, wait, receive, decompress
 		var p = perf.perf;
@@ -996,7 +1012,33 @@ class Request {
 			if (p[key].elapsed) p[key].elapsed = Math.max(0, p[key].elapsed);
 		}
 		
+		if (old_perf) {
+			// import perf from previous retry/redirect
+			if (old_perf.perf && old_perf.perf[perf.totalKey]) {
+				for (var key in old_perf.perf) {
+					if (key == perf.totalKey) {
+						perf.perf[key].start = old_perf.perf[key].start;
+					}
+					else {
+						if (!perf.perf[key]) perf.perf[key] = {};
+						if (!perf.perf[key].end) perf.perf[key].end = 1;
+						if (!perf.perf[key].elapsed) perf.perf[key].elapsed = 0;
+						var elapsed = old_perf.perf[key].elapsed;
+						perf.perf[key].elapsed += (elapsed / (old_perf.scale / perf.scale)) || 0;
+					}
+				}
+			}
+			
+			if (old_perf.counters) {
+				for (var key in old_perf.counters) {
+					perf.count( key, old_perf.counters[key] );
+				}
+			}
+		} // old_perf
+		
+		perf.count('requests', 1);
 		perf.end();
+		
 		return perf;
 	}
 	

@@ -87,6 +87,7 @@ module.exports = {
 			server.startup( function() {
 				// startup complete
 				var web_server = self.web_server = server.WebServer;
+				var NUM_RETRIES = 3;
 				
 				// write log in sync mode, for troubleshooting
 				server.logger.set('sync', true);
@@ -138,6 +139,25 @@ module.exports = {
 						{ 'Location': web_server.getSelfURL(args.request, "/json?redirected=1") },
 						null
 					);
+				} );
+				
+				web_server.addURIHandler( '/retry', 'Retry', function(args, callback) {
+					// send error N times, then success
+					var ms = parseInt( args.query.ms || 1 );
+					
+					if (NUM_RETRIES) {
+						NUM_RETRIES--;
+						setTimeout( function() { 
+							callback( "500 Internal Server Error", {}, "Internal Server Error" );
+						}, ms );
+					}
+					else {
+						callback( {
+							code: 0,
+							description: "Success",
+							user: { Name: "Joe", Email: "foo@bar.com" }
+						} );
+					}
 				} );
 				
 				web_server.addURIHandler( '/server-status', "Server Status", true, function(args, callback) {
@@ -1491,6 +1511,45 @@ module.exports = {
 					test.ok( resp.statusCode == 302, "Got 302 response: " + resp.statusCode );
 					test.ok( !!resp.headers['location'], "Got Location header" );
 					test.ok( !!resp.headers['location'].match(/redirected/), "Correct Location header");
+					
+					var metrics = perf.metrics();
+					test.ok( metrics.counters.requests == 1, "Expected 1 requests in perf metrics, got: " + metrics.counters.requests );
+					test.ok( !metrics.counters.redirects, "Expected no redirects in perf metrics, got: " + metrics.counters.redirects );
+					
+					test.done();
+				} 
+			);
+		},
+		
+		// redirect with follow
+		function testRedirectFollow(test) {
+			request.get( 'http://127.0.0.1:3020/redirect', { follow: 1 },
+				function(err, resp, data, perf) {
+					test.ok( !err, "No error from PixlRequest: " + err );
+					test.ok( !!resp, "Got resp from PixlRequest" );
+					test.ok( resp.statusCode == 200, "Got 200 response: " + resp.statusCode );
+					
+					var metrics = perf.metrics();
+					test.ok( metrics.counters.requests == 2, "Expected 2 requests in perf metrics, got: " + metrics.counters.requests );
+					test.ok( metrics.counters.redirects == 1, "Expected 1 redirects in perf metrics, got: " + metrics.counters.redirects );
+					
+					test.done();
+				} 
+			);
+		},
+		
+		// retries
+		function testRetries(test) {
+			request.get( 'http://127.0.0.1:3020/retry', { retries: 5 },
+				function(err, resp, data, perf) {
+					test.ok( !err, "No error from PixlRequest: " + err );
+					test.ok( !!resp, "Got resp from PixlRequest" );
+					test.ok( resp.statusCode == 200, "Got 200 response: " + resp.statusCode );
+					
+					var metrics = perf.metrics();
+					test.ok( metrics.counters.requests == 4, "Expected 4 requests in perf metrics, got: " + metrics.counters.requests );
+					test.ok( metrics.counters.retries == 3, "Expected 3 retries in perf metrics, got: " + metrics.counters.retries );
+					
 					test.done();
 				} 
 			);
