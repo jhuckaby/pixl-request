@@ -205,6 +205,7 @@ class Request {
 			if (!res.statusCode.toString().match(self.successMatch)) {
 				err = new Error( "HTTP " + res.statusCode + " " + res.statusMessage );
 				err.code = res.statusCode;
+				err.headers = res.headers;
 				return callback( err, res, data, perf );
 			}
 			
@@ -248,6 +249,7 @@ class Request {
 			if (!res.statusCode.toString().match(self.successMatch)) {
 				err = new Error( "HTTP " + res.statusCode + " " + res.statusMessage );
 				err.code = res.statusCode;
+				err.headers = res.headers;
 				return callback( err, res, data, perf );
 			}
 			
@@ -771,6 +773,7 @@ class Request {
 			if (self.autoError && !res.statusCode.toString().match(self.successMatch)) {
 				err = new Error( "HTTP " + res.statusCode + " " + res.statusMessage );
 				err.code = res.statusCode;
+				err.headers = res.headers;
 			}
 			
 			// abort controller
