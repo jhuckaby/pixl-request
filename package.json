@@ -17,8 +17,7 @@
 		"http",
 		"request",
 		"upload",
-		"multipart",
-		"rate-limit"
+		"multipart"
 	],
 	"dependencies": {
 		"class-plus": "^2.0.0",
