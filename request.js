@@ -203,9 +203,10 @@ class Request {
 			
 			// check for http error code
 			if (!res.statusCode.toString().match(self.successMatch)) {
-				err = new Error( "HTTP " + res.statusCode + " " + res.statusMessage );
+				err = new Error( "HTTP " + res.statusCode + " " + res.statusMessage + ": " + url );
 				err.code = res.statusCode;
 				err.headers = res.headers;
+				err.url = url;
 				return callback( err, res, data, perf );
 			}
 			
@@ -247,9 +248,10 @@ class Request {
 			
 			// check for http error code
 			if (!res.statusCode.toString().match(self.successMatch)) {
-				err = new Error( "HTTP " + res.statusCode + " " + res.statusMessage );
+				err = new Error( "HTTP " + res.statusCode + " " + res.statusMessage + ": " + url );
 				err.code = res.statusCode;
 				err.headers = res.headers;
+				err.url = url;
 				return callback( err, res, data, perf );
 			}
 			
@@ -787,9 +789,10 @@ class Request {
 			// user might want non-success response codes to be considered errors
 			var err = null;
 			if (self.autoError && !res.statusCode.toString().match(self.successMatch)) {
-				err = new Error( "HTTP " + res.statusCode + " " + res.statusMessage );
+				err = new Error( "HTTP " + res.statusCode + " " + res.statusMessage + ": " + url );
 				err.code = res.statusCode;
 				err.headers = res.headers;
+				err.url = url;
 			}
 			
 			// abort controller
