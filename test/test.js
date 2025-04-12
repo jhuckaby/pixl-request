@@ -14,7 +14,8 @@ var PixlRequest = require('..');
 var request = new PixlRequest();
 
 var http = require('http');
-var agent = new http.Agent({ keepAlive: true });
+var agent_ka = new http.Agent({ keepAlive: true });
+var agent_na = new http.Agent({ keepAlive: false });
 
 process.chdir( __dirname );
 
@@ -1470,7 +1471,7 @@ module.exports = {
 		function testKeepAlives(test) {
 			// test keep-alive sockets
 			var sendReqGetSocketID = function(ka, callback) {
-				request.json( 'http://127.0.0.1:3020/json', false, { agent: ka ? agent : null },
+				request.json( 'http://127.0.0.1:3020/json', false, { agent: ka ? agent_ka : agent_na },
 					function(err, resp, json, perf) {
 						if (err && !json && !json.socket_id) return callback(false);
 						callback( json.socket_id );

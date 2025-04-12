@@ -1,6 +1,6 @@
 {
 	"name": "pixl-request",
-	"version": "2.2.0",
+	"version": "2.2.1",
 	"description": "A very simple module for making HTTP requests.",
 	"author": "Joseph Huckaby <jhuckaby@gmail.com>",
 	"homepage": "https://github.com/jhuckaby/pixl-request",
@@ -21,8 +21,8 @@
 	],
 	"dependencies": {
 		"class-plus": "^2.0.0",
-		"errno": "0.1.7",
-		"form-data": "2.3.2",
+		"errno": "1.0.0",
+		"form-data": "4.0.2",
 		"pixl-perf": "^1.0.0",
 		"pixl-xml": "^1.0.0"
 	},
