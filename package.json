@@ -1,6 +1,6 @@
 {
 	"name": "pixl-request",
-	"version": "2.2.1",
+	"version": "2.3.0",
 	"description": "A very simple module for making HTTP requests.",
 	"author": "Joseph Huckaby <jhuckaby@gmail.com>",
 	"homepage": "https://github.com/jhuckaby/pixl-request",
@@ -24,7 +24,8 @@
 		"errno": "1.0.0",
 		"form-data": "4.0.2",
 		"pixl-perf": "^1.0.0",
-		"pixl-xml": "^1.0.0"
+		"pixl-xml": "^1.0.0",
+		"proxy-agent": "6.5.0"
 	},
 	"devDependencies": {
 		"async": "3.2.5",

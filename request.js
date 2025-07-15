@@ -13,35 +13,19 @@ const XML = require('pixl-xml');
 const Class = require('class-plus');
 const Perf = require('pixl-perf');
 const ErrNo = require('errno');
+const { ProxyAgent } = require('proxy-agent');
 
 // sniff for Brotli compression support, as it was added in Node v10.16
 const hasBrotli = !!zlib.BrotliCompress;
 const pixlAgent = "PixlRequest " + require('./package.json').version;
 
+// sniff for proxy
+const userProxyEnv = (process.env.http_proxy || process.env.https_proxy || process.env.all_proxy || process.env.HTTP_PROXY || process.env.HTTPS_PROXY || process.env.ALL_PROXY);
+
 var dns_cache = {};
 var http_common = require('_http_common');
 var checkIsHttpToken = http_common._checkIsHttpToken;
 var checkInvalidHeaderChar = http_common._checkInvalidHeaderChar;
-
-class PixlClientRequest extends http.ClientRequest {
-	// attempt to prevent node crasher on rare, random unhandled exception around request error
-	emit(evt, ...args) {
-		if ((evt === 'error') && !this.listenerCount('error')) {
-			// eat error instead of crashing node
-			this._pixlEarlyError = args[0] || 'Unknown Error';
-			return true;
-		}
-		else return super.emit(evt, ...args);
-	}
-};
-
-function request(options, cb) {
-	// wrapper around http.request and https.request
-	if (options.protocol === 'https:') {
-		options._defaultAgent = https.globalAgent;
-	}
-	return new PixlClientRequest(options, cb);
-};
 
 module.exports = Class({
 	
@@ -80,6 +64,9 @@ module.exports = Class({
 	
 	// use pooled http/https agents for keep-alive connections
 	autoAgent: false,
+	
+	// use proxy agent when specific env vars are present
+	proxyAgent: false,
 	
 	// optional retries for certain kinds of transient network errors
 	defaultRetries: false,
@@ -439,6 +426,17 @@ class Request {
 			options = new_opts;
 		}
 		
+		// detect need for proxy agent on first request
+		if (!this.proxyAgent && userProxyEnv) {
+			var proxyOpts = {};
+			if (this.autoAgent) {
+				// use our global keep-alive agents for proxy
+				proxyOpts.httpAgent = this.autoAgent.http;
+				proxyOpts.httpsAgent = this.autoAgent.https;
+			}
+			this.proxyAgent = new ProxyAgent(proxyOpts);
+		}
+		
 		// setup perf
 		var perf = new Perf();
 		perf.begin();
@@ -482,7 +480,10 @@ class Request {
 		
 		// optionally use auto agents
 		// if no agent is specified, use close connections
-		if (this.autoAgent) {
+		if (this.proxyAgent) {
+			options.agent = this.proxyAgent;
+		}
+		else if (this.autoAgent) {
 			options.agent = (parts.protocol == 'https:') ? this.autoAgent.https : this.autoAgent.http;
 		}
 		else if (!('agent' in options)) {
@@ -707,7 +708,8 @@ class Request {
 		}; // handleSocketError
 		
 		// construct request object
-		req = request( options, function(res) {
+		var proto_class = (parts.protocol == 'https:') ? https : http;
+		req = proto_class.request( options, function(res) {
 			// got response headers
 			res.on('error', handleSocketError);
 			if (req.destroyed) return;
@@ -977,9 +979,6 @@ class Request {
 		
 		// assume this is a socket error too
 		req.on('error', handleSocketError );
-		
-		// handle super special early error
-		if (req._pixlEarlyError) handleSocketError(req._pixlEarlyError);
 		
 		if (timeout) {
 			// set initial socket timeout which aborts the request

@@ -28,12 +28,12 @@ This module is a very simple wrapper around Node's built-in [http](https://nodej
 - [Automatic Errors](#automatic-errors)
 - [Automatic Retries](#automatic-retries)
 - [Compressed Responses](#compressed-responses)
-- [Rate Limiting](#rate-limiting)
 - [Abort Signals](#abort-signals)
 - [Performance Metrics](#performance-metrics)
 - [DNS Caching](#dns-caching)
 	* [Flushing the Cache](#flushing-the-cache)
 - [SSL Certificate Validation](#ssl-certificate-validation)
+- [Proxy Servers](#proxy-servers)
 - [License](#license)
 
 # Usage
@@ -1721,11 +1721,47 @@ function(err, resp, data, perf) {
 
 Please only do this if you understand the security ramifications, and *completely trust* the host you are connecting to, and the network you are on.  Skipping the certificate validation step should really only be done in special circumstances, such as testing your own internal server with a self-signed cert.
 
+# Proxy Servers
+
+To send requests through a proxy, simply set one or more of the [de-facto standard environment variables](https://curl.se/docs/manpage.html#ENVIRONMENT) used for this purpose:
+
+```
+HTTPS_PROXY
+HTTP_PROXY
+ALL_PROXY
+NO_PROXY
+```
+
+The pixl-request library will detect these environment variables and automatically configure proxy routing for your requests.  The environment variable names may be upper or lower-case.  The proxy format should be a fully-qualified URL with port number.  To set a single proxy server for handling both HTTP and HTTPS requests, the simplest way is to just set `ALL_PROXY` (usually specified via a plain HTTP URL with port).  Example:
+
+```
+ALL_PROXY=http://company-proxy-server.com:8080
+```
+
+Use the `NO_PROXY` environment variable to specify a comma-separated domain whitelist.  Requests to any of the domains on this list will bypass the proxy and be sent directly.  Example:
+
+```
+NO_PROXY=direct.example.com
+```
+
+Please note that for proxying HTTPS (SSL) requests, unless you have pre-configured your client machine to trust your proxy's local SSL cert, you will have to set the `rejectUnauthorized` option to `false` in your requests.  See [SSL Certificate Validation](#ssl-certificate-validation) above for details.
+
+The types of proxies supported are:
+
+| Protocol | Example |
+|----------|---------|
+| `http` | `http://proxy-server-over-tcp.com:3128` |
+| `https` | `https://proxy-server-over-tls.com:3129` |
+| `socks` | `socks://username:password@some-socks-proxy.com:9050` |
+| `socks5` | `socks5://username:password@some-socks-proxy.com:9050` |
+| `socks4` | `socks4://some-socks-proxy.com:9050` |
+| `pac-*` | `pac+http://www.example.com/proxy.pac` |
+
 # License
 
 **The MIT License**
 
-*Copyright (c) 2015 - 2024 Joseph Huckaby.*
+*Copyright (c) 2015 - 2025 Joseph Huckaby.*
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
