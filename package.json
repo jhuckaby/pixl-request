@@ -22,7 +22,7 @@
 	"dependencies": {
 		"class-plus": "^2.0.0",
 		"errno": "1.0.0",
-		"form-data": "4.0.2",
+		"form-data": "4.0.4",
 		"pixl-perf": "^1.0.0",
 		"pixl-xml": "^1.0.0",
 		"proxy-agent": "6.5.0"
