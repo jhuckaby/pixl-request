@@ -12,6 +12,7 @@ const FormData = require('form-data');
 const XML = require('pixl-xml');
 const Class = require('class-plus');
 const Perf = require('pixl-perf');
+const ACL = require('pixl-acl');
 const ErrNo = require('errno');
 const { ProxyAgent } = require('proxy-agent');
 
@@ -162,6 +163,18 @@ class Request {
 	setAutoContentLength(enabled) {
 		// automatically include Content-Length, or not
 		this.autoContentLength = enabled;
+	}
+	
+	setBlacklist(ips) {
+		// blacklist certain IPs or ranges
+		if (!ips) { delete this.blacklist; return; }
+		this.blacklist = new ACL(ips);
+	}
+	
+	setWhitelist(ips) {
+		// whitelist certain IPs or ranges
+		if (!ips) { delete this.whitelist; return; }
+		this.whitelist = new ACL(ips);
 	}
 	
 	json(url, data, options, callback) {
@@ -707,6 +720,18 @@ class Request {
 			}
 		}; // handleSocketError
 		
+		var handleIPError = function(err) {
+			// An ip-related error (whitelist or blacklist)
+			if (!callback || aborted) return; // request is already done
+			aborted = true;
+			req.destroy();
+			if (timer) { clearTimeout(timer); timer = null; }
+			if (!callback_fired) {
+				callback_fired = true;
+				callback( err, null, null, self.finishPerf(perf, old_perf) );
+			}
+		}; // handleIPError
+		
 		// construct request object
 		var proto_class = (parts.protocol == 'https:') ? https : http;
 		req = proto_class.request( options, function(res) {
@@ -952,6 +977,14 @@ class Request {
 				socket.once('lookup', function(err, address, family, hostname) {
 					// track DNS lookup time
 					perf.end('dns', perf.perf.total.start);
+					
+					// whitelist/blacklist checks here
+					if (self.whitelist && !self.whitelist.check(address)) {
+						return handleIPError( new Error("IP is not whitelisted: " + address) );
+					}
+					if (self.blacklist && self.blacklist.check(address)) {
+						return handleIPError( new Error("IP is blacklisted: " + address) );
+					}
 					
 					// possibly cache IP for future lookups
 					if (self.dnsTTL) {

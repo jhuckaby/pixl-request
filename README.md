@@ -34,6 +34,7 @@ This module is a very simple wrapper around Node's built-in [http](https://nodej
 	* [Flushing the Cache](#flushing-the-cache)
 - [SSL Certificate Validation](#ssl-certificate-validation)
 - [Proxy Servers](#proxy-servers)
+- [Access Control Lists](#access-control-lists)
 - [License](#license)
 
 # Usage
@@ -1756,6 +1757,24 @@ The types of proxies supported are:
 | `socks5` | `socks5://username:password@some-socks-proxy.com:9050` |
 | `socks4` | `socks4://some-socks-proxy.com:9050` |
 | `pac-*` | `pac+http://www.example.com/proxy.pac` |
+
+# Access Control Lists
+
+If you want to limit outbound requests to specific IP addresses or ranges, you can specify an IP ACL, in the form of a whitelist and/or blacklist.  The methods are `setWhitelist()` for a whitelist, and `setBlacklist()` for a blacklist.  IPv4 and IPv6 addresses and ranges are both supported, including single IPs, partial IPs, and [CIDR blocks](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing).
+
+For example, if you wanted to restrict requests to your local network, and disallow all public internet access, you could use a whitelist like this:
+
+```js
+request.setWhitelist( ["127.0.0.1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "::1/128", "fd00::/8", "169.254.0.0/16", "fe80::/10"] );
+```
+
+Or, if you want to explicitly block access to a particular country like NK, you could use a blacklist:
+
+```js
+request.setBlacklist( ["175.45.176.0/22", "2405:8100::/32"] );
+```
+
+See [pixl-acl](https://github.com/jhuckaby/pixl-acl) for more details on the IP syntax.
 
 # License
 
