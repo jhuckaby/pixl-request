@@ -1671,8 +1671,8 @@ module.exports = {
 			);
 		},
 		
-		// acl block
-		function testACL(test) {
+		// server acl
+		function testServerACL(test) {
 			request.get( 'http://127.0.0.1:3020/server-status', // ACL'ed endpoint
 				{
 					headers: {
@@ -1687,8 +1687,7 @@ module.exports = {
 				} 
 			);
 		},
-		
-		function testACLBadIP(test) {
+		function testServerACLBadIP(test) {
 			// test badly-formatted IP
 			request.get( 'http://127.0.0.1:3020/server-status', // ACL'ed endpoint
 				{
@@ -1703,6 +1702,58 @@ module.exports = {
 					test.done();
 				} 
 			);
+		},
+		
+		// whitelist
+		function testWhitelistAllow(test) {
+			// test whitelist with allowed ip
+			request.setWhitelist('127.0.0.1');
+			
+			request.json( 'http://127.0.0.1:3020/json', false, function(err, resp, data, perf) {
+				test.ok( !err, "No error from PixlRequest: " + err );
+				test.ok( !!resp, "Got resp from PixlRequest" );
+				test.ok( resp.statusCode == 200, "Got 200 response: " + resp.statusCode );
+				
+				request.setWhitelist(false);
+				test.done();
+			});
+		},
+		function testWhitelistDeny(test) {
+			// test whitelist with denied ip
+			request.setWhitelist('10.0.0.0/8');
+			
+			request.json( 'http://127.0.0.1:3020/json', false, function(err, resp, data, perf) {
+				test.ok( !!err, "Expected error from PixlRequest" );
+				
+				request.setWhitelist(false);
+				test.done();
+			});
+		},
+		
+		// blacklist
+		function testBlacklistAllow(test) {
+			// test blacklist with allowed ip
+			request.setBlacklist('192.168.1.1');
+			
+			request.json( 'http://127.0.0.1:3020/json', false, function(err, resp, data, perf) {
+				test.ok( !err, "No error from PixlRequest: " + err );
+				test.ok( !!resp, "Got resp from PixlRequest" );
+				test.ok( resp.statusCode == 200, "Got 200 response: " + resp.statusCode );
+				
+				request.setBlacklist(false);
+				test.done();
+			});
+		},
+		function testBlacklistDeny(test) {
+			// test blacklist with denied ip
+			request.setBlacklist('127.0.0.0/8');
+			
+			request.json( 'http://127.0.0.1:3020/json', false, function(err, resp, data, perf) {
+				test.ok( !!err, "Expected error from PixlRequest" );
+				
+				request.setBlacklist(false);
+				test.done();
+			});
 		},
 		
 		function testConditionalResponseHeaders(test) {

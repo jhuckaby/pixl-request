@@ -7,6 +7,7 @@ const http = require('http');
 const https = require('https');
 const querystring = require('querystring');
 const zlib = require('zlib');
+const net = require("net");
 
 const FormData = require('form-data');
 const XML = require('pixl-xml');
@@ -490,6 +491,16 @@ class Request {
 		if (!options.port) options.port = parts.port || ((parts.protocol == 'https:') ? 443 : 80);
 		if (!options.path) options.path = parts.path;
 		if (!options.auth && parts.auth) options.auth = parts.auth;
+		
+		// check acls early if URL points directly at IP address
+		if (net.isIP(options.hostname)) {
+			if (this.whitelist && !this.whitelist.check(options.hostname)) {
+				return callback( new Error("IP is not whitelisted: " + options.hostname) );
+			}
+			if (this.blacklist && this.blacklist.check(options.hostname)) {
+				return callback( new Error("IP is blacklisted: " + options.hostname) );
+			}
+		}
 		
 		// optionally use auto agents
 		// if no agent is specified, use close connections
