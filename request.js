@@ -203,7 +203,7 @@ class Request {
 			if (err) return callback( err, null, null, perf );
 			
 			// check for http error code
-			if (!res.statusCode.toString().match(self.successMatch)) {
+			if (self.autoError && !res.statusCode.toString().match(self.successMatch)) {
 				err = new Error( "HTTP " + res.statusCode + " " + res.statusMessage + ": " + url );
 				err.code = res.statusCode;
 				err.headers = res.headers;
@@ -248,7 +248,7 @@ class Request {
 			if (err) return callback( err, null, null, perf );
 			
 			// check for http error code
-			if (!res.statusCode.toString().match(self.successMatch)) {
+			if (self.autoError && !res.statusCode.toString().match(self.successMatch)) {
 				err = new Error( "HTTP " + res.statusCode + " " + res.statusMessage + ": " + url );
 				err.code = res.statusCode;
 				err.headers = res.headers;
