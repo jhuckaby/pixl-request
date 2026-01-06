@@ -72,6 +72,7 @@ module.exports = Class({
 	
 	// optional retries for certain kinds of transient network errors
 	defaultRetries: false,
+	defaultRetryDelay: 0,
 	retryMatch: /^5\d\d$/,
 	
 	// automatically include Content-Length header where applicable
@@ -118,6 +119,10 @@ class Request {
 		// override the default retry setting (boolean or int)
 		// specify integer to set limit of max retries to allow
 		this.defaultRetries = retries;
+	}
+	setRetryDelay(delay) {
+		// override the default retry delay (ms)
+		this.defaultRetryDelay = delay;
 	}
 	
 	setDNSCache(ttl) {
@@ -580,6 +585,11 @@ class Request {
 			retries = options.retries;
 			delete options.retries;
 		}
+		var retryDelay = this.defaultRetryDelay;
+		if ('retryDelay' in options) {
+			retryDelay = options.retryDelay;
+			delete options.retryDelay;
+		}
 		
 		// optional progress events
 		var progress = null;
@@ -658,6 +668,7 @@ class Request {
 						options.download = download;
 						options.preflight = pre_download;
 						options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
+						options.retryDelay = retryDelay * 2;
 						options.progress = progress;
 						options.signal = signal;
 						
@@ -674,7 +685,7 @@ class Request {
 						
 						// recurse into self for retry
 						callback_fired = true; // prevent firing twice
-						self.request( url, options, callback );
+						setTimeout( function() { self.request( url, options, callback ); }, retryDelay );
 						return;
 					}
 					
@@ -705,6 +716,7 @@ class Request {
 						options.download = download;
 						options.preflight = pre_download;
 						options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
+						options.retryDelay = retryDelay * 2;
 						options.progress = progress;
 						options.signal = signal;
 						
@@ -721,7 +733,7 @@ class Request {
 						
 						// recurse into self for retry
 						callback_fired = true; // prevent firing twice
-						self.request( url, options, callback );
+						setTimeout( function() { self.request( url, options, callback ); }, retryDelay );
 						return;
 					}
 					
@@ -765,6 +777,7 @@ class Request {
 				options.download = download;
 				options.preflight = pre_download;
 				options.retries = retries;
+				options.retryDelay = retryDelay;
 				options.progress = progress;
 				options.signal = signal;
 				
@@ -799,6 +812,7 @@ class Request {
 				options.download = download;
 				options.preflight = pre_download;
 				options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
+				options.retryDelay = retryDelay * 2;
 				options.progress = progress;
 				options.signal = signal;
 				
@@ -820,7 +834,7 @@ class Request {
 				// recurse into self for retry
 				if (timer) { clearTimeout(timer); timer = null; }
 				callback_fired = true; // prevent firing twice
-				self.request( url, options, callback );
+				setTimeout( function() { self.request( url, options, callback ); }, retryDelay );
 				return;
 			}
 			

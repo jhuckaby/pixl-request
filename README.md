@@ -1529,6 +1529,18 @@ This example would make up to 6 total attempts (the initial attempt plus up to 5
 
 For the purpose of automatic retries an "error" is considered to be any core error emitted on the request object, such as a DNS lookup failure, TCP connect failure, socket timeout, or any HTTP response code in the `5xx` range (500 - 599), such as an `Internal Server Error`.  Any other errors, for example anything in the `4xx` range, are *not* retried, as they are typically considered to be more permanent.
 
+## Exponential Backoff
+
+By default, retries are attempted immediately.  To set a retry delay, you can do it globally:
+
+```js
+request.setRetryDelay( 250 );
+```
+
+Or you can set it per request in the `options` object, using a `retryDelay` property (milliseconds).
+
+Either way, for each retry after the first one, the retry delay is doubled.  So in the above example it would wait 250ms, 500ms, 1s, 2s, then 4s.
+
 # Compressed Responses
 
 The request library automatically handles Brotli, Gzip and Deflate encoded responses that come back from the remote server.  These are transparently decoded for you.  However, you should know that by default all outgoing requests include an `Accept-Encoding: gzip, deflate, br` header, which broadcasts our support for it.  If you do not want responses to be compressed, you can unset this header.  See the [Default Headers](#default-headers) section above.
