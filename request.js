@@ -46,7 +46,8 @@ module.exports = Class({
 	
 	// default TTFB timeout of 30 seconds
 	defaultTimeout: 30000,
-	idleTimeout: 30000,
+	defaultConnectTimeout: 10000,
+	defaultIdleTimeout: 30000,
 	
 	// do not follow redirects by default
 	defaultFollow: false,
@@ -103,6 +104,10 @@ class Request {
 	setTimeout(timeout) {
 		// override the default first-byte timeout (milliseconds)
 		this.defaultTimeout = timeout;
+	}
+	setConnectTimeout(timeout) {
+		// override the default connect timeout (DNS + socket connect, milliseconds)
+		this.defaultConnectTimeout = timeout;
 	}
 	setIdleTimeout(timeout) {
 		// override the default socket idle timeout (milliseconds)
@@ -434,13 +439,18 @@ class Request {
 		var self = this;
 		var callback_fired = false;
 		var timer = null;
+		var connect_timer = null;
 		var upload_timer = null;
 		var socket = null;
 		var req = null;
 		var key;
 		var clearUploadMonitor = function() {};
+		var clearConnectTimer = function() {
+			if (connect_timer) { clearTimeout(connect_timer); connect_timer = null; }
+		};
 		var clearTimers = function() {
 			if (timer) { clearTimeout(timer); timer = null; }
+			clearConnectTimer();
 			clearUploadMonitor();
 		};
 		if (!options) options = {};
@@ -572,6 +582,11 @@ class Request {
 			timeout = options.timeout;
 			delete options.timeout;
 		}
+		var connectTimeout = this.defaultConnectTimeout;
+		if ('connectTimeout' in options) {
+			connectTimeout = options.connectTimeout;
+			delete options.connectTimeout;
+		}
 		var idleTimeout = this.defaultIdleTimeout;
 		if ('idleTimeout' in options) {
 			idleTimeout = options.idleTimeout;
@@ -670,6 +685,7 @@ class Request {
 					if (retries) {
 						// revert options to original state
 						options.timeout = timeout;
+						options.connectTimeout = connectTimeout;
 						options.idleTimeout = idleTimeout;
 						options.follow = follow;
 						options.download = download;
@@ -718,6 +734,7 @@ class Request {
 					if (retries) {
 						// revert options to original state
 						options.timeout = timeout;
+						options.connectTimeout = connectTimeout;
 						options.idleTimeout = idleTimeout;
 						options.follow = follow;
 						options.download = download;
@@ -811,6 +828,7 @@ class Request {
 			if (follow && res.statusCode.toString().match(self.followMatch) && res.headers['location']) {
 				// revert options to original state
 				options.timeout = timeout;
+				options.connectTimeout = connectTimeout;
 				options.idleTimeout = idleTimeout;
 				options.follow = (typeof(follow) == 'number') ? (follow - 1) : follow;
 				options.download = download;
@@ -846,6 +864,7 @@ class Request {
 			if (retries && res.statusCode.toString().match(self.retryMatch)) {
 				// revert options to original state
 				options.timeout = timeout;
+				options.connectTimeout = connectTimeout;
 				options.idleTimeout = idleTimeout;
 				options.follow = follow;
 				options.download = download;
@@ -1032,6 +1051,9 @@ class Request {
 			// hook some socket events once we have a reference to it
 			socket = sock;
 			
+			// socket may already be connected if reusing keep-alive
+			if (!socket.connecting) clearConnectTimer();
+			
 			if (!socket._pixl_request_hooked) {
 				socket._pixl_request_hooked = true;
 				
@@ -1061,6 +1083,7 @@ class Request {
 				
 				socket.once('connect', function() {
 					// track socket connect time
+					clearConnectTimer();
 					perf.end('connect', perf.perf.total.start);
 				} );
 				
@@ -1082,6 +1105,10 @@ class Request {
 			// set initial socket timeout which aborts the request
 			// this is cleared at first byte, then we rely on the socket idle timeout
 			timer = setTimeout( function() { handleTimeout('Request Timeout', timeout); }, timeout );
+		}
+		if (connectTimeout && (!socket || socket.connecting)) {
+			// set connect timeout (includes DNS + socket connect)
+			connect_timer = setTimeout( function() { handleTimeout('Connect Timeout', connectTimeout); }, connectTimeout );
 		}
 		
 		if (post_data !== null) {

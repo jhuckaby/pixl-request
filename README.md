@@ -144,7 +144,9 @@ Here are all the methods available in the request library:
 | [json()](#json-rest-api) | Sends a request to a JSON REST API endpoint and parses the response. |
 | [xml()](#xml-rest-api) | Sends a request to an XML REST API endpoint and parses the response. |
 | [setHeader()](#default-headers) | Overrides or adds a default header for future requests. |
-| [setTimeout()](#handling-timeouts) | Overrides the default socket timeout (milliseconds). |
+| [setTimeout()](#handling-timeouts) | Overrides the default time-to-first-byte timeout (milliseconds). |
+| [setConnectTimeout()](#handling-timeouts) | Overrides the default DNS + socket connect timeout (milliseconds). |
+| [setIdleTimeout()](#handling-timeouts) | Overrides the default socket idle timeout (milliseconds). |
 | [setFollow()](#automatic-redirects) | Overrides the default behavior for following redirects. |
 | [setAutoDecompress()](#compressed-responses) | Overrides the default behavior of decompressing responses. |
 | [setDNSCache()](#dns-caching) | Enable DNS caching and set the TTL in seconds. |
@@ -1379,9 +1381,9 @@ request.defaultHeaders = {
 
 # Handling Timeouts
 
-PixlRequest handles timeouts in two different ways.  First, by measuring the "time to first byte" (TTFB), from the start of the request.  This is *not* an idle timeout, and *not* a connect timeout -- it is the maximum amount of time allowed from the start of the request, to the first byte received.  Separately, it also can track an idle timeout *after* the first byte has been received.  You can set each timeout separately.
+PixlRequest handles timeouts in three different ways.  First is connect timeout, which includes DNS lookup time plus socket connect time.  Second, by measuring the "time to first byte" (TTFB), from the start of the request.  This is *not* an idle timeout, and *not* a connect timeout -- it is the maximum amount of time allowed from the start of the request, to the first byte received.  Separately, it can also track an idle socket timeout during sending and receiving.  You can set each timeout separately.
 
-The default TTFB timeout and idle timeout for all requests is 30 seconds.  You can customize this per request by including `timeout` and/or `idleTimeout` properties with your options object, and setting them to a number of milliseconds:
+The default connect timeout is 10 seconds, while the TTFB timeout and idle timeout defaults are 30 seconds each.  You can customize these per request by including `connectTimeout`, `timeout` and/or `idleTimeout` properties with your options object, and setting them to a number of milliseconds:
 
 ```js
 try {
@@ -1391,6 +1393,7 @@ try {
 			"gender": "male",
 			"age": 35
 		},
+		"connectTimeout": 3 * 1000, // 3 second connect timeout (DNS + socket connect)
 		"timeout": 10 * 1000, // 10 second TTFB timeout
 		"idleTimeout": 5 * 1000 // 5 second idle timeout
 	});
@@ -1413,6 +1416,7 @@ request.post( 'http://myserver.com/api/post', {
 		"gender": "male",
 		"age": 35
 	},
+	"connectTimeout": 3 * 1000, // 3 second connect timeout (DNS + socket connect)
 	"timeout": 10 * 1000, // 10 second TTFB timeout
 	"idleTimeout": 5 * 1000 // 5 second idle timeout
 }, 
@@ -1427,9 +1431,10 @@ function(err, resp, data, perf) {
 
 </details>
 
-Or you can set default timeouts for all requests on your class instance, using the `setTimeout()` and `setIdleTimeout()` methods:
+Or you can set default timeouts for all requests on your class instance, using the `setConnectTimeout()`, `setTimeout()` and `setIdleTimeout()` methods:
 
 ```js
+request.setConnectTimeout( 3 * 1000 ); // 3 seconds (DNS + socket connect)
 request.setTimeout( 10 * 1000 ); // 10 seconds
 request.setIdleTimeout( 5 * 1000 ); // 5 seconds
 ```
@@ -1437,6 +1442,7 @@ request.setIdleTimeout( 5 * 1000 ); // 5 seconds
 When a timeout occurs, an `error` event is emitted.  The error message will follow one of these formats, depending on which timeout was fired: 
 
 ```
+Connect Timeout (### ms)
 Request Timeout (### ms)
 Idle Timeout (### ms)
 ```
