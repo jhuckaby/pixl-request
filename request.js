@@ -434,9 +434,15 @@ class Request {
 		var self = this;
 		var callback_fired = false;
 		var timer = null;
+		var upload_timer = null;
 		var socket = null;
 		var req = null;
 		var key;
+		var clearUploadMonitor = function() {};
+		var clearTimers = function() {
+			if (timer) { clearTimeout(timer); timer = null; }
+			clearUploadMonitor();
+		};
 		if (!options) options = {};
 		else {
 			// make shallow copy of options so we don't clobber user's version
@@ -607,12 +613,12 @@ class Request {
 			if (typeof(download) == 'string') {
 				try { download = fs.createWriteStream(download); }
 				catch (err) {
-					if (timer) { clearTimeout(timer); timer = null; }
+					clearTimers();
 					if (callback && !callback_fired) { callback_fired = true; callback(err); }
 					return;
 				}
 				download.on('error', function(err) {
-					if (timer) { clearTimeout(timer); timer = null; }
+					clearTimers();
 					if (callback && !callback_fired) { callback_fired = true; callback(err); }
 					return;
 				});
@@ -656,6 +662,7 @@ class Request {
 				return;
 			}
 			if (!aborted) {
+				clearTimers();
 				aborted = true;
 				req.destroy();
 				if (callback && !callback_fired) {
@@ -705,7 +712,7 @@ class Request {
 				else if (e.errno && ErrNo.code[e.errno]) {
 					msg = ucfirst(ErrNo.code[e.errno].description) + " (" + e.message + ")";
 				}
-				if (timer) { clearTimeout(timer); timer = null; }
+				clearTimers();
 				if (!callback_fired) {
 					// check for retry
 					if (retries) {
@@ -742,13 +749,45 @@ class Request {
 				}
 			}
 		}; // handleSocketError
+			
+		// monitor outgoing multipart uploads for idle socket timeout
+		var startUploadMonitor = function() {
+			if (!is_form || !idleTimeout || !post_data) return;
+			var sentPacket = false;
+			
+			var markPacket = function() {
+				// reset dead man's switch for upload idle timeout
+				sentPacket = true;
+			};
+			
+			var handleUploadTimeout = function() {
+				if (sentPacket && idleTimeout) {
+					// data sent since last timeout, reset timer
+					sentPacket = false;
+					upload_timer = setTimeout( handleUploadTimeout, idleTimeout );
+					return;
+				}
+				handleTimeout('Idle Timeout', idleTimeout);
+			};
+			
+			clearUploadMonitor = function() {
+				if (upload_timer) { clearTimeout(upload_timer); upload_timer = null; }
+				sentPacket = false;
+				post_data.removeListener('data', markPacket);
+				post_data.removeListener('error', handleSocketError);
+			};
+			
+			post_data.on('data', markPacket);
+			post_data.on('error', handleSocketError);
+			upload_timer = setTimeout( handleUploadTimeout, idleTimeout );
+		}; // startUploadMonitor
 		
 		var handleIPError = function(err) {
 			// An ip-related error (whitelist or blacklist)
 			if (!callback || aborted) return; // request is already done
 			aborted = true;
 			req.destroy();
-			if (timer) { clearTimeout(timer); timer = null; }
+			clearTimers();
 			if (!callback_fired) {
 				callback_fired = true;
 				callback( err, null, null, self.finishPerf(perf, old_perf) );
@@ -765,7 +804,7 @@ class Request {
 			perf.end('wait', perf.perf.total.start);
 			
 			// clear initial timeout (first byte received)
-			if (timer) { clearTimeout(timer); timer = null; }
+			clearTimers();
 			if (idleTimeout) timer = setTimeout( function() { handleTimeout('Idle Timeout', idleTimeout); }, idleTimeout );
 			
 			// check for auto-redirect
@@ -797,7 +836,7 @@ class Request {
 				res.on('end', function() {} );
 				
 				// recurse into self for redirect
-				if (timer) { clearTimeout(timer); timer = null; }
+				clearTimers();
 				callback_fired = true; // prevent firing twice
 				self.request( res.headers['location'], options, callback );
 				return;
@@ -832,7 +871,7 @@ class Request {
 				res.on('end', function() {} );
 				
 				// recurse into self for retry
-				if (timer) { clearTimeout(timer); timer = null; }
+				clearTimers();
 				callback_fired = true; // prevent firing twice
 				setTimeout( function() { self.request( url, options, callback ); }, retryDelay );
 				return;
@@ -871,7 +910,7 @@ class Request {
 				} );
 				
 				download.on('finish', function() {
-					if (timer) { clearTimeout(timer); timer = null; }
+					clearTimers();
 					perf.end('receive', perf.perf.total.start);
 					if (callback && !callback_fired) {
 						callback_fired = true;
@@ -925,7 +964,7 @@ class Request {
 				
 				res.on('end', function() {
 					// end of response
-					if (timer) { clearTimeout(timer); timer = null; }
+					clearTimers();
 					perf.end('receive', perf.perf.total.start);
 					if (socket) {
 						perf.count('bytes_sent', (socket.bytesWritten || 0) - (socket._pixl_orig_bytes_written || 0));
@@ -1032,6 +1071,7 @@ class Request {
 		
 		req.on('finish', function() {
 			// track data send time (only really works for POST/PUT)
+			clearUploadMonitor();
 			perf.end('send', perf.perf.total.start);
 		} );
 		
@@ -1046,7 +1086,10 @@ class Request {
 		
 		if (post_data !== null) {
 			// write post data to socket
-			if (is_form) post_data.pipe( req );
+			if (is_form) {
+				startUploadMonitor();
+				post_data.pipe( req );
+			}
 			else {
 				// Note: Sending data with req.end() prevents chunked transfer encoding
 				req.end( post_data );
