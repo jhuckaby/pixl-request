@@ -1541,11 +1541,12 @@ By default, retries are attempted immediately.  To set a retry delay, you can do
 
 ```js
 request.setRetryDelay( 250 );
+request.setRetryDelayMax( 4000 );
 ```
 
-Or you can set it per request in the `options` object, using a `retryDelay` property (milliseconds).
+Or you can set it per request in the `options` object, using `retryDelay` and `retryDelayMax` properties (both in milliseconds).
 
-Either way, for each retry after the first one, the retry delay is doubled.  So in the above example it would wait 250ms, 500ms, 1s, 2s, then 4s.
+Either way, for each retry after the first one, the retry delay is doubled, up to but not exceeding the max.  So in the above example it would wait 250ms, 500ms, 1s, 2s, then 4s.  If not specified, the default maximum retry delay is 30s.
 
 # Compressed Responses
 

@@ -74,6 +74,7 @@ module.exports = Class({
 	// optional retries for certain kinds of transient network errors
 	defaultRetries: false,
 	defaultRetryDelay: 0,
+	defaultRetryDelayMax: 30000,
 	retryMatch: /^5\d\d$/,
 	
 	// automatically include Content-Length header where applicable
@@ -128,6 +129,10 @@ class Request {
 	setRetryDelay(delay) {
 		// override the default retry delay (ms)
 		this.defaultRetryDelay = delay;
+	}
+	setRetryDelayMax(delay) {
+		// override the default retry delay maximum (ms)
+		this.defaultRetryDelayMax = delay;
 	}
 	
 	setDNSCache(ttl) {
@@ -611,6 +616,11 @@ class Request {
 			retryDelay = options.retryDelay;
 			delete options.retryDelay;
 		}
+		var retryDelayMax = this.defaultRetryDelayMax;
+		if ('retryDelayMax' in options) {
+			retryDelayMax = options.retryDelayMax;
+			delete options.retryDelayMax;
+		}
 		
 		// optional progress events
 		var progress = null;
@@ -691,7 +701,8 @@ class Request {
 						options.download = download;
 						options.preflight = pre_download;
 						options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
-						options.retryDelay = retryDelay * 2;
+						options.retryDelay = Math.min( retryDelay * 2, retryDelayMax );
+						options.retryDelayMax = retryDelayMax;
 						options.progress = progress;
 						options.signal = signal;
 						
@@ -740,7 +751,8 @@ class Request {
 						options.download = download;
 						options.preflight = pre_download;
 						options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
-						options.retryDelay = retryDelay * 2;
+						options.retryDelay = Math.min( retryDelay * 2, retryDelayMax );
+						options.retryDelayMax = retryDelayMax;
 						options.progress = progress;
 						options.signal = signal;
 						
@@ -835,6 +847,7 @@ class Request {
 				options.preflight = pre_download;
 				options.retries = retries;
 				options.retryDelay = retryDelay;
+				options.retryDelayMax = retryDelayMax;
 				options.progress = progress;
 				options.signal = signal;
 				
@@ -870,7 +883,8 @@ class Request {
 				options.download = download;
 				options.preflight = pre_download;
 				options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
-				options.retryDelay = retryDelay * 2;
+				options.retryDelay = Math.min( retryDelay * 2, retryDelayMax );
+				options.retryDelayMax = retryDelayMax;
 				options.progress = progress;
 				options.signal = signal;
 				
