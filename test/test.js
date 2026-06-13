@@ -89,6 +89,7 @@ module.exports = {
 				// startup complete
 				var web_server = self.web_server = server.WebServer;
 				var NUM_RETRIES = 3;
+				var NUM_PARTIAL_DOWNLOAD_RETRIES = 1;
 				
 				// write log in sync mode, for troubleshooting
 				server.logger.set('sync', true);
@@ -161,6 +162,39 @@ module.exports = {
 					}
 				} );
 				
+				web_server.addURIHandler( '/partial-download-retry', 'Partial Download Retry', function(args, callback) {
+					// send a partial response once, then a clean response on retry
+					if (NUM_PARTIAL_DOWNLOAD_RETRIES) {
+						NUM_PARTIAL_DOWNLOAD_RETRIES--;
+
+						args.response.writeHead( 200, {
+							'Content-Type': "text/plain",
+							'Content-Length': 12
+						} );
+						args.response.write( "BAD" );
+						args.request.socket.destroy();
+						callback( true );
+					}
+					else {
+						args.response.writeHead( 200, {
+							'Content-Type': "text/plain",
+							'Content-Length': 4
+						} );
+						args.response.end( "GOOD" );
+						callback( true );
+					}
+				} );
+
+				web_server.addURIHandler( '/bad-gzip-download', 'Bad Gzip Download', function(args, callback) {
+					// send invalid gzip bytes to make the streaming decompressor fail
+					args.response.writeHead( 200, {
+						'Content-Type': "text/plain",
+						'Content-Encoding': "gzip"
+					} );
+					args.response.end( "not actually gzip" );
+					callback( true );
+				} );
+
 				web_server.addURIHandler( '/server-status', "Server Status", true, function(args, callback) {
 					// send web stats (JSON), ACL protected endpoint
 					callback( server.WebServer.getStats() );
@@ -949,6 +983,70 @@ module.exports = {
 			);
 		},
 		
+		// download path should not be opened before request validation
+		function testStreamDownloadInvalidHeaderDoesNotCreateFile(test) {
+			var temp_file = 'downloaded-invalid-header.txt';
+			if (fs.existsSync(temp_file)) fs.unlinkSync(temp_file);
+
+			request.get( 'http://127.0.0.1:3020/spacer.gif',
+				{
+					download: temp_file,
+					headers: {
+						'Bad\nHeader': "nope"
+					}
+				},
+				function(err, resp, download, perf) {
+					test.ok( !!err, "Expected error from PixlRequest" );
+					test.ok( !fs.existsSync(temp_file), temp_file + " was not created" );
+
+					test.done();
+				}
+			);
+		},
+
+		// retrying a partial path download should rewrite, not append
+		function testStreamDownloadRetryAfterPartialFailure(test) {
+			var temp_file = 'downloaded-retry.txt';
+			if (fs.existsSync(temp_file)) fs.unlinkSync(temp_file);
+
+			request.get( 'http://127.0.0.1:3020/partial-download-retry',
+				{
+					download: temp_file,
+					retries: 1
+				},
+				function(err, resp, download, perf) {
+					test.ok( !err, "No error from PixlRequest: " + err );
+					test.ok( !!resp, "Got resp from PixlRequest" );
+					test.ok( resp.statusCode == 200, "Got 200 response: " + resp.statusCode );
+					test.ok( fs.existsSync(temp_file), temp_file + " is present" );
+					test.ok( fs.readFileSync(temp_file, 'utf8') === "GOOD", temp_file + " was rewritten cleanly" );
+
+					fs.unlinkSync(temp_file);
+					test.done();
+				}
+			);
+		},
+
+		// decompressor errors should close the download stream and callback with an error
+		function testStreamDownloadDecompressorError(test) {
+			var temp_file = 'downloaded-bad-gzip.txt';
+			if (fs.existsSync(temp_file)) fs.unlinkSync(temp_file);
+
+			request.get( 'http://127.0.0.1:3020/bad-gzip-download',
+				{
+					download: temp_file
+				},
+				function(err, resp, download, perf) {
+					test.ok( !!err, "Expected decompressor error from PixlRequest" );
+					test.ok( !!resp, "Got resp from PixlRequest" );
+					test.ok( resp.statusCode == 200, "Got 200 response: " + resp.statusCode );
+
+					if (fs.existsSync(temp_file)) fs.unlinkSync(temp_file);
+					test.done();
+				}
+			);
+		},
+
 		// rate limit upstream
 		function testMultipartPostRateLimit(test) {
 			request.post( 'http://127.0.0.1:3020/json',

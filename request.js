@@ -631,23 +631,21 @@ class Request {
 		
 		// stream mode
 		var download = null;
+		var download_target = null;
+		var download_path = null;
+		var download_owned = false;
+		var download_finished = false;
+		var download_finish_handler = null;
+		var download_error_handler = null;
+		var download_cleanup_started = false;
+		var download_source = null;
+		var download_decompressor = null;
 		var pre_download = null;
 		
 		if ('download' in options) {
-			download = options.download;
-			if (typeof(download) == 'string') {
-				try { download = fs.createWriteStream(download); }
-				catch (err) {
-					clearTimers();
-					if (callback && !callback_fired) { callback_fired = true; callback(err); }
-					return;
-				}
-				download.on('error', function(err) {
-					clearTimers();
-					if (callback && !callback_fired) { callback_fired = true; callback(err); }
-					return;
-				});
-			}
+			download_target = options.download;
+			if (typeof(download_target) == 'string') download_path = download_target;
+			else download = download_target;
 			delete options.download;
 		}
 		if ('preflight' in options) {
@@ -665,6 +663,101 @@ class Request {
 		var signal = options.signal || null;
 		delete options.signal;
 		
+		var cleanupDownload = function(callback) {
+			// Close any unfinished download stream before we report errors or retry.
+			// This prevents leaked write streams and makes path downloads retry cleanly.
+			if (!callback) callback = function() {};
+			if (!download || download_finished || download_cleanup_started) return callback();
+
+			download_cleanup_started = true;
+
+			if (download_source) {
+				try { download_source.unpipe(); }
+				catch (err) {}
+			}
+			if (download_decompressor) {
+				try { download_decompressor.unpipe(); }
+				catch (err) {}
+				if (download_decompressor.destroy) download_decompressor.destroy();
+			}
+
+			if (download_finish_handler) download.removeListener('finish', download_finish_handler);
+			if (download_error_handler) download.removeListener('error', download_error_handler);
+
+			var stream = download;
+			var done = function() {
+				download = null;
+				callback();
+			};
+
+			if (!download_owned) return done();
+
+			var wait_for_close = !stream.closed;
+			if (wait_for_close) stream.once('close', done);
+			if (stream.destroy) stream.destroy();
+			else if (stream.end) stream.end();
+
+			if (!wait_for_close) done();
+		};
+
+		var restoreOptions = function(nextFollow, nextRetries, nextRetryDelay) {
+			// Restore caller-level options before redirecting or retrying.
+			// For path downloads, this keeps the path string instead of the active stream.
+			options.timeout = timeout;
+			options.connectTimeout = connectTimeout;
+			options.idleTimeout = idleTimeout;
+			options.follow = nextFollow;
+			options.download = download_target;
+			options.preflight = pre_download;
+			options.retries = nextRetries;
+			options.retryDelay = nextRetryDelay;
+			options.retryDelayMax = retryDelayMax;
+			options.progress = progress;
+			options.signal = signal;
+
+			delete options.protocol;
+			delete options.hostname;
+			delete options.port;
+			delete options.path;
+			delete options.auth;
+
+			if (post_data !== null) options.data = post_data;
+		};
+
+		var retryRequest = function(nextUrl, delay) {
+			// Recurse after cleaning up the current attempt's download stream.
+			callback_fired = true; // prevent firing twice
+			cleanupDownload( function() {
+				setTimeout( function() { self.request( nextUrl, options, callback ); }, delay );
+			} );
+		};
+
+		var failRequest = function(err, res, data) {
+			// Report an error only after any active download stream is closed.
+			callback_fired = true;
+			cleanupDownload( function() {
+				callback( err, res || null, data || null, self.finishPerf(perf, old_perf) );
+			} );
+		};
+
+		var createDownloadStream = function() {
+			// Path downloads get a brand new write stream for each attempt.
+			if (download || !download_path) return true;
+
+			download_cleanup_started = false;
+			download_finished = false;
+			download_owned = true;
+
+			try { download = fs.createWriteStream(download_path); }
+			catch (err) {
+				clearTimers();
+				if (callback && !callback_fired) failRequest( err );
+				return false;
+			}
+
+			return true;
+		};
+
 		// reject bad characters in headers, which can crash node's writeHead() call
 		for (var key in options.headers) {
 			if (!checkIsHttpToken(key)) {
@@ -693,38 +786,21 @@ class Request {
 				if (callback && !callback_fired) {
 					// check for retry
 					if (retries) {
-						// revert options to original state
-						options.timeout = timeout;
-						options.connectTimeout = connectTimeout;
-						options.idleTimeout = idleTimeout;
-						options.follow = follow;
-						options.download = download;
-						options.preflight = pre_download;
-						options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
-						options.retryDelay = Math.min( retryDelay * 2, retryDelayMax );
-						options.retryDelayMax = retryDelayMax;
-						options.progress = progress;
-						options.signal = signal;
+						restoreOptions(
+							follow,
+							(typeof(retries) == 'number') ? (retries - 1) : retries,
+							Math.min( retryDelay * 2, retryDelayMax )
+						);
 						
 						perf.count('retries', 1);
 						options.perf = self.finishPerf(perf, old_perf);
 						
-						delete options.protocol;
-						delete options.hostname;
-						delete options.port;
-						delete options.path;
-						delete options.auth;
-						
-						if (post_data !== null) options.data = post_data;
-						
 						// recurse into self for retry
-						callback_fired = true; // prevent firing twice
-						setTimeout( function() { self.request( url, options, callback ); }, retryDelay );
+						retryRequest( url, retryDelay );
 						return;
 					}
 					
-					callback_fired = true;
-					callback( new Error(msg + " (" + ms + " ms)"), null, null, self.finishPerf(perf, old_perf) );
+					failRequest( new Error(msg + " (" + ms + " ms)") );
 				}
 			}
 		}; // timeout
@@ -743,38 +819,21 @@ class Request {
 				if (!callback_fired) {
 					// check for retry
 					if (retries) {
-						// revert options to original state
-						options.timeout = timeout;
-						options.connectTimeout = connectTimeout;
-						options.idleTimeout = idleTimeout;
-						options.follow = follow;
-						options.download = download;
-						options.preflight = pre_download;
-						options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
-						options.retryDelay = Math.min( retryDelay * 2, retryDelayMax );
-						options.retryDelayMax = retryDelayMax;
-						options.progress = progress;
-						options.signal = signal;
+						restoreOptions(
+							follow,
+							(typeof(retries) == 'number') ? (retries - 1) : retries,
+							Math.min( retryDelay * 2, retryDelayMax )
+						);
 						
 						perf.count('retries', 1);
 						options.perf = self.finishPerf(perf, old_perf);
 						
-						delete options.protocol;
-						delete options.hostname;
-						delete options.port;
-						delete options.path;
-						delete options.auth;
-						
-						if (post_data !== null) options.data = post_data;
-						
 						// recurse into self for retry
-						callback_fired = true; // prevent firing twice
-						setTimeout( function() { self.request( url, options, callback ); }, retryDelay );
+						retryRequest( url, retryDelay );
 						return;
 					}
 					
-					callback_fired = true;
-					callback( new Error(msg), null, null, self.finishPerf(perf, old_perf) );
+					failRequest( new Error(msg) );
 				}
 			}
 		}; // handleSocketError
@@ -818,8 +877,7 @@ class Request {
 			req.destroy();
 			clearTimers();
 			if (!callback_fired) {
-				callback_fired = true;
-				callback( err, null, null, self.finishPerf(perf, old_perf) );
+				failRequest( err );
 			}
 		}; // handleIPError
 		
@@ -838,29 +896,14 @@ class Request {
 			
 			// check for auto-redirect
 			if (follow && res.statusCode.toString().match(self.followMatch) && res.headers['location']) {
-				// revert options to original state
-				options.timeout = timeout;
-				options.connectTimeout = connectTimeout;
-				options.idleTimeout = idleTimeout;
-				options.follow = (typeof(follow) == 'number') ? (follow - 1) : follow;
-				options.download = download;
-				options.preflight = pre_download;
-				options.retries = retries;
-				options.retryDelay = retryDelay;
-				options.retryDelayMax = retryDelayMax;
-				options.progress = progress;
-				options.signal = signal;
+				restoreOptions(
+					(typeof(follow) == 'number') ? (follow - 1) : follow,
+					retries,
+					retryDelay
+				);
 				
 				perf.count('redirects', 1);
 				options.perf = self.finishPerf(perf, old_perf);
-				
-				delete options.protocol;
-				delete options.hostname;
-				delete options.port;
-				delete options.path;
-				delete options.auth;
-				
-				if (post_data !== null) options.data = post_data;
 				
 				// allow original request to finish
 				res.on('data', function () {} );
@@ -868,36 +911,20 @@ class Request {
 				
 				// recurse into self for redirect
 				clearTimers();
-				callback_fired = true; // prevent firing twice
-				self.request( res.headers['location'], options, callback );
+				retryRequest( res.headers['location'], 0 );
 				return;
 			}
 			
 			// check for retry
 			if (retries && res.statusCode.toString().match(self.retryMatch)) {
-				// revert options to original state
-				options.timeout = timeout;
-				options.connectTimeout = connectTimeout;
-				options.idleTimeout = idleTimeout;
-				options.follow = follow;
-				options.download = download;
-				options.preflight = pre_download;
-				options.retries = (typeof(retries) == 'number') ? (retries - 1) : retries;
-				options.retryDelay = Math.min( retryDelay * 2, retryDelayMax );
-				options.retryDelayMax = retryDelayMax;
-				options.progress = progress;
-				options.signal = signal;
+				restoreOptions(
+					follow,
+					(typeof(retries) == 'number') ? (retries - 1) : retries,
+					Math.min( retryDelay * 2, retryDelayMax )
+				);
 				
 				perf.count('retries', 1);
 				options.perf = self.finishPerf(perf, old_perf);
-				
-				delete options.protocol;
-				delete options.hostname;
-				delete options.port;
-				delete options.path;
-				delete options.auth;
-				
-				if (post_data !== null) options.data = post_data;
 				
 				// allow original request to finish
 				res.on('data', function () {} );
@@ -905,8 +932,7 @@ class Request {
 				
 				// recurse into self for retry
 				clearTimers();
-				callback_fired = true; // prevent firing twice
-				setTimeout( function() { self.request( url, options, callback ); }, retryDelay );
+				retryRequest( url, retryDelay );
 				return;
 			}
 			
@@ -924,61 +950,93 @@ class Request {
 				var aborter = function() {
 					if (aborted || callback_fired) return;
 					aborted = true;
-					callback_fired = true;
 					req.abort();
-					callback( new Error("Request Aborted"), res, null, self.finishPerf(perf, old_perf) );
+					failRequest( new Error("Request Aborted"), res );
 				};
 				signal.addEventListener('abort', aborter, { once: true });
 				if (signal.aborted) aborter();
 			}
 			
-			if (download) {
+			if (download_target) {
 				// stream content to a pipe
-				var decompressor = null;
-				
 				res.on('data', function (chunk) {
 					// reset dead man's switch for idle timeout
 					receivedPacket = true;
 					if (progress) progress(chunk, res);
 				} );
 				
-				download.on('finish', function() {
+				download_finish_handler = function() {
+					download_finished = true;
 					clearTimers();
 					perf.end('receive', perf.perf.total.start);
 					if (callback && !callback_fired) {
 						callback_fired = true;
 						callback( err, res, download, self.finishPerf(perf, old_perf) );
 					}
-				} );
+				};
+
+				download_error_handler = function(err) {
+					// Local stream errors are not retried, but we still clean up the pipe.
+					if (callback_fired) return;
+					aborted = true;
+					clearTimers();
+					if (req && !req.destroyed) req.destroy();
+					failRequest( err, res );
+				};
 				
 				if (pre_download) {
+					if (!download && !createDownloadStream()) return;
+					download.on('finish', download_finish_handler);
+					download.on('error', download_error_handler);
+
 					// special callback to handle raw stream externally
 					if (pre_download( null, res, download ) === false) {
-						// special pre-abort error case, switch to buffer mode
-						download.removeAllListeners('finish');
+						// special pre-abort case, switch to buffer mode and close our path stream
+						cleanupDownload();
 						download = null;
+						download_target = null;
 					}
 				}
 				else if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bbr\b/i) && hasBrotli) {
 					// brotli stream
-					decompressor = zlib.createBrotliDecompress();
-					decompressor.on('error', function(err) { /* no-op */ });
-					res.pipe( decompressor ).pipe( download );
+					if (!download && !createDownloadStream()) return;
+					download.on('finish', download_finish_handler);
+					download.on('error', download_error_handler);
+
+					download_source = res;
+					download_decompressor = zlib.createBrotliDecompress();
+					download_decompressor.on('error', download_error_handler);
+					res.pipe( download_decompressor ).pipe( download );
 				}
 				else if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bgzip\b/i)) {
 					// gunzip stream
-					decompressor = zlib.createGunzip();
-					decompressor.on('error', function(err) { /* no-op */ });
-					res.pipe( decompressor ).pipe( download );
+					if (!download && !createDownloadStream()) return;
+					download.on('finish', download_finish_handler);
+					download.on('error', download_error_handler);
+
+					download_source = res;
+					download_decompressor = zlib.createGunzip();
+					download_decompressor.on('error', download_error_handler);
+					res.pipe( download_decompressor ).pipe( download );
 				}
 				else if (self.autoDecompress && res.headers['content-encoding'] && res.headers['content-encoding'].match(/\bdeflate\b/i)) {
 					// inflate stream
-					decompressor = zlib.createInflate();
-					decompressor.on('error', function(err) { /* no-op */ });
-					res.pipe( decompressor ).pipe( download );
+					if (!download && !createDownloadStream()) return;
+					download.on('finish', download_finish_handler);
+					download.on('error', download_error_handler);
+
+					download_source = res;
+					download_decompressor = zlib.createInflate();
+					download_decompressor.on('error', download_error_handler);
+					res.pipe( download_decompressor ).pipe( download );
 				}
 				else {
 					// response is not encoded
+					if (!download && !createDownloadStream()) return;
+					download.on('finish', download_finish_handler);
+					download.on('error', download_error_handler);
+
+					download_source = res;
 					res.pipe( download );
 				}
 			} // stream mode
