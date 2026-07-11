@@ -17,6 +17,7 @@ This module is a very simple wrapper around Node's built-in [http](https://nodej
 	* [HTTP PUT](#http-put)
 	* [HTTP DELETE](#http-delete)
 	* [File Downloads](#file-downloads)
+		+ [Streaming Responses](#streaming-responses)
 		+ [Advanced Stream Control](#advanced-stream-control)
 	* [Progress Updates](#progress-updates)
 	* [Keep-Alives](#keep-alives)
@@ -737,6 +738,43 @@ function(err, resp, data, perf) {
 ```
 
 </details>
+
+### Streaming Responses
+
+You can use a Node.js `PassThrough` stream when another API needs a readable stream before the HTTP response is available.  Create the stream first, pass it to both the consumer and the `download` property, and pixl-request will pipe the response through it.  For example, here is how to process a text response one line at a time using `readline`:
+
+```js
+const readline = require('readline');
+const { PassThrough } = require('stream');
+
+let stream = new PassThrough();
+let rl = readline.createInterface({
+	input: stream,
+	crlfDelay: Infinity
+});
+
+rl.on('line', function(line) {
+	// process each line as soon as it arrives
+	console.log("Line: " + line);
+});
+
+rl.on('close', function() {
+	console.log("Done");
+});
+
+try {
+	let { resp, perf } = await request.get( 'https://example.com/events', {
+		"download": stream
+	});
+	console.log("Status: " + resp.statusCode + " " + resp.statusMessage);
+	console.log("Performance: ", perf.metrics());
+}
+catch (err) {
+	throw err;
+}
+```
+
+The line handlers run while the response is downloading, and the request promise resolves after the stream is finished.  Automatic response decompression is still handled transparently.
 
 ### Advanced Stream Control
 
