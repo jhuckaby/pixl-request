@@ -89,6 +89,7 @@ module.exports = {
 				// startup complete
 				var web_server = self.web_server = server.WebServer;
 				var NUM_RETRIES = 3;
+				var RETRY_AFTER_TESTS = { seconds: 1, date: 1 };
 				var NUM_PARTIAL_DOWNLOAD_RETRIES = 1;
 				
 				// write log in sync mode, for troubleshooting
@@ -159,6 +160,19 @@ module.exports = {
 							description: "Success",
 							user: { Name: "Joe", Email: "foo@bar.com" }
 						} );
+					}
+				} );
+				
+				web_server.addURIHandler( '/retry-after', 'Retry After', function(args, callback) {
+					// send one rate-limit response, then succeed on the retry
+					var format = args.query.format || 'seconds';
+					if (RETRY_AFTER_TESTS[format]) {
+						RETRY_AFTER_TESTS[format]--;
+						var retry_after = (format == 'date') ? new Date(Date.now() - 1000).toUTCString() : '0';
+						callback( "429 Too Many Requests", { 'Retry-After': retry_after }, "Too Many Requests" );
+					}
+					else {
+						callback( { code: 0, description: "Success" } );
 					}
 				} );
 				
@@ -1651,6 +1665,34 @@ module.exports = {
 					
 					test.done();
 				} 
+			);
+		},
+		
+		function testRetryAfterSeconds(test) {
+			// Retry-After should replace the configured delay for the upcoming retry
+			var start = performance.now();
+			request.get( 'http://127.0.0.1:3020/retry-after?format=seconds', { retries: 1, retryDelay: 2000 },
+				function(err, resp) {
+					test.ok( !err, "No error from PixlRequest: " + err );
+					test.ok( !!resp, "Got resp from PixlRequest" );
+					test.ok( resp.statusCode == 200, "Got 200 response: " + resp.statusCode );
+					test.ok( performance.now() - start < 1000, "Retry-After seconds replaced the configured delay" );
+					test.done();
+				}
+			);
+		},
+		
+		function testRetryAfterDate(test) {
+			// HTTP-date values in the past should result in an immediate retry
+			var start = performance.now();
+			request.get( 'http://127.0.0.1:3020/retry-after?format=date', { retries: 1, retryDelay: 2000 },
+				function(err, resp) {
+					test.ok( !err, "No error from PixlRequest: " + err );
+					test.ok( !!resp, "Got resp from PixlRequest" );
+					test.ok( resp.statusCode == 200, "Got 200 response: " + resp.statusCode );
+					test.ok( performance.now() - start < 1000, "Retry-After date replaced the configured delay" );
+					test.done();
+				}
 			);
 		},
 		

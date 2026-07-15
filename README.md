@@ -151,6 +151,7 @@ Here are all the methods available in the request library:
 | [setConnectTimeout()](#handling-timeouts) | Overrides the default DNS + socket connect timeout (milliseconds). |
 | [setIdleTimeout()](#handling-timeouts) | Overrides the default socket idle timeout (milliseconds). |
 | [setFollow()](#automatic-redirects) | Overrides the default behavior for following redirects. |
+| [setRetryMatch()](#automatic-retries) | Customizes which HTTP response codes trigger automatic retries. |
 | [setAutoDecompress()](#compressed-responses) | Overrides the default behavior of decompressing responses. |
 | [setDNSCache()](#dns-caching) | Enable DNS caching and set the TTL in seconds. |
 | [flushDNSCache()](#flushing-the-cache) | Flush all IPs from the internal DNS cache. |
@@ -1599,7 +1600,15 @@ request.setRetries( 5 );
 
 This example would make up to 6 total attempts (the initial attempt plus up to 5 retries), before ultimately failing the operation and resolving the promise with the last error encountered.
 
-For the purpose of automatic retries an "error" is considered to be any core error emitted on the request object, such as a DNS lookup failure, TCP connect failure, socket timeout, or any HTTP response code in the `5xx` range (500 - 599), such as an `Internal Server Error`.  Any other errors, for example anything in the `4xx` range, are *not* retried, as they are typically considered to be more permanent.
+For the purpose of automatic retries an "error" is considered to be any core error emitted on the request object, such as a DNS lookup failure, TCP connect failure or socket timeout, or one of these HTTP response codes: 408, 425, 429, 500, 502, 503 or 504.  Other HTTP errors are not retried, as they are typically considered to be more permanent.
+
+To customize which HTTP response codes trigger retries, call `setRetryMatch()` and pass in a regular expression.  This completely replaces the default response code match.  For example, this adds 409 Conflict to the default list:
+
+```js
+request.setRetryMatch( /^(408|409|425|429|500|502|503|504)$/ );
+```
+
+This setting only controls HTTP response codes.  Core network errors such as DNS failures, connection failures and socket timeouts are still retried.
 
 ## Exponential Backoff
 
@@ -1613,6 +1622,8 @@ request.setRetryDelayMax( 4000 );
 Or you can set it per request in the `options` object, using `retryDelay` and `retryDelayMax` properties (both in milliseconds).
 
 Either way, for each retry after the first one, the retry delay is doubled, up to but not exceeding the max.  So in the above example it would wait 250ms, 500ms, 1s, 2s, then 4s.  If not specified, the default maximum retry delay is 30s.
+
+If a retryable HTTP response includes a valid `Retry-After` header, its delay replaces the configured delay for that retry.  Both delay seconds and HTTP-date values are supported.
 
 # Compressed Responses
 

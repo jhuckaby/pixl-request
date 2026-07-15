@@ -76,7 +76,7 @@ module.exports = Class({
 	defaultRetries: false,
 	defaultRetryDelay: 0,
 	defaultRetryDelayMax: 30000,
-	retryMatch: /^5\d\d$/,
+	retryMatch: /^(408|425|429|500|502|503|504)$/,
 	
 	// automatically include Content-Length header where applicable
 	// disable if you want chunked transfer encoding
@@ -132,6 +132,10 @@ class Request {
 		// override the default retry setting (boolean or int)
 		// specify integer to set limit of max retries to allow
 		this.defaultRetries = retries;
+	}
+	setRetryMatch(regexp) {
+		// override the HTTP response codes that trigger retries
+		this.retryMatch = regexp;
 	}
 	setRetryDelay(delay) {
 		// override the default retry delay (ms)
@@ -920,6 +924,15 @@ class Request {
 			
 			// check for retry
 			if (retries && res.statusCode.toString().match(self.retryMatch)) {
+				// if the server supplied a valid Retry-After header, use it for this retry
+				var retryAfter = res.headers['retry-after'];
+				if (retryAfter) {
+					retryAfter = retryAfter.toString().trim();
+					var retryAfterDelay = retryAfter.match(/^\d+$/) ?
+						(parseInt(retryAfter, 10) * 1000) : (Date.parse(retryAfter) - Date.now());
+					if (!isNaN(retryAfterDelay)) retryDelay = Math.max( 0, retryAfterDelay );
+				}
+				
 				restoreOptions(
 					follow,
 					(typeof(retries) == 'number') ? (retries - 1) : retries,
