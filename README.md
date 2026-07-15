@@ -23,6 +23,7 @@ This module is a very simple wrapper around Node's built-in [http](https://nodej
 	* [Keep-Alives](#keep-alives)
 	* [JSON REST API](#json-rest-api)
 	* [XML REST API](#xml-rest-api)
+- [Default Request Options](#default-request-options)
 - [Default Headers](#default-headers)
 - [Handling Timeouts](#handling-timeouts)
 - [Automatic Redirects](#automatic-redirects)
@@ -144,6 +145,7 @@ Here are all the methods available in the request library:
 | [delete()](#http-delete) | Performs an HTTP DELETE request. |
 | [json()](#json-rest-api) | Sends a request to a JSON REST API endpoint and parses the response. |
 | [xml()](#xml-rest-api) | Sends a request to an XML REST API endpoint and parses the response. |
+| [setOptions()](#default-request-options) | Replaces the default options for all future requests. |
 | [setHeader()](#default-headers) | Overrides or adds a default header for future requests. |
 | [setTimeout()](#handling-timeouts) | Overrides the default time-to-first-byte timeout (milliseconds). |
 | [setConnectTimeout()](#handling-timeouts) | Overrides the default DNS + socket connect timeout (milliseconds). |
@@ -1342,6 +1344,32 @@ function(err, resp, data, perf) {
 </details>
 
 **Note:** If the server doesn't send back XML, or it cannot be parsed, an error will be thrown.
+
+# Default Request Options
+
+You can set default options for all future requests on a class instance by calling `setOptions()`.  This is useful when the same option should be included with every request.  For example, you can disable HTTPS certificate validation globally for a request instance:
+
+```js
+request.setOptions({
+	"rejectUnauthorized": false
+});
+```
+
+These defaults are passed through to Node's [http.request()](https://nodejs.org/api/http.html#httprequesturl-options-callback) or [https.request()](https://nodejs.org/api/https.html#httpsrequestoptions-callback) method.  Calling `setOptions()` again replaces the entire defaults object.  Options supplied directly to an individual request take precedence over these defaults:
+
+```js
+request.setOptions({
+	"family": 4,
+	"rejectUnauthorized": false
+});
+
+// Override just the certificate setting for this request.
+let { data } = await request.get( 'https://example.com/', {
+	"rejectUnauthorized": true
+});
+```
+
+Please only disable certificate validation if you understand the security ramifications and completely trust the remote host and your network.  See [SSL Certificate Validation](#ssl-certificate-validation) for more details.
 
 # Default Headers
 

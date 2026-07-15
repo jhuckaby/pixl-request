@@ -1917,6 +1917,48 @@ module.exports = {
 		},
 		
 		// https
+		function testDefaultOptions(test) {
+			// Make sure setOptions() replaces the previous instance defaults.
+			// The local HTTPS server has a self-signed certificate, so this request
+			// will only succeed if rejectUnauthorized is passed through as a default.
+			var defaultRequest = new PixlRequest();
+			defaultRequest.setOptions({ oldOption: true });
+			defaultRequest.setOptions({
+				rejectUnauthorized: false,
+				headers: {
+					'X-Test': "Default Options"
+				}
+			});
+			test.ok( !('oldOption' in defaultRequest.defaultOptions), "Previous default options were replaced" );
+			
+			defaultRequest.json( 'https://127.0.0.1:3021/json', false,
+				function(err, resp, json, perf) {
+					test.ok( !err, "No error from PixlRequest: " + err );
+					test.ok( !!resp, "Got resp from PixlRequest" );
+					test.ok( resp.statusCode == 200, "Got 200 response: " + resp.statusCode );
+					test.ok( !!json, "Got JSON in response" );
+					test.ok( json.headers['x-test'] == "Default Options", "Found default option header echoed in JSON response" );
+					
+					// Per-request options should take precedence over the stored defaults.
+					defaultRequest.json( 'https://127.0.0.1:3021/json', false,
+						{
+							headers: {
+								'X-Test': "Request Override"
+							}
+						},
+						function(err, resp, json, perf) {
+							test.ok( !err, "No error from PixlRequest: " + err );
+							test.ok( !!resp, "Got resp from PixlRequest" );
+							test.ok( resp.statusCode == 200, "Got 200 response: " + resp.statusCode );
+							test.ok( !!json, "Got JSON in response" );
+							test.ok( json.headers['x-test'] == "Request Override", "Per-request option overrode the default" );
+							test.done();
+						}
+					);
+				}
+			);
+		},
+		
 		function testHTTPSRequest(test) {
 			// test HTTPS GET request to webserver backend
 			request.json( 'https://127.0.0.1:3021/json', false,

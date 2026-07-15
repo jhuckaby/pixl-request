@@ -43,6 +43,7 @@ module.exports = Class({
 	},
 	
 	defaultHeaders: null,
+	defaultOptions: null,
 	
 	// default TTFB timeout of 30 seconds
 	defaultTimeout: 30000,
@@ -86,10 +87,16 @@ class Request {
 	
 	constructor(useragent) {
 		// class constructor
+		this.defaultOptions = {};
 		this.defaultHeaders = {
 			'Accept-Encoding': hasBrotli ? "gzip, deflate, br" : "gzip, deflate"
 		};
 		this.setUserAgent( useragent || pixlAgent );
+	}
+	
+	setOptions(options) {
+		// replace the default options for all future requests
+		this.defaultOptions = options || {};
 	}
 	
 	setHeader(name, value) {
@@ -458,13 +465,9 @@ class Request {
 			clearConnectTimer();
 			clearUploadMonitor();
 		};
-		if (!options) options = {};
-		else {
-			// make shallow copy of options so we don't clobber user's version
-			var new_opts = {};
-			for (key in options) new_opts[key] = options[key];
-			options = new_opts;
-		}
+		
+		// Apply default options
+		options = { ...this.defaultOptions, ...(options || {}) };
 		
 		// detect need for proxy agent on first request
 		if (!this.proxyAgent && userProxyEnv) {
