@@ -7,6 +7,7 @@ var fs = require('fs');
 var net = require('net');
 var crypto = require('crypto');
 var async = require('async');
+var ChildProcess = require('child_process');
 
 var PixlServer = require('pixl-server');
 
@@ -1039,6 +1040,18 @@ module.exports = {
 					test.done();
 				}
 			);
+		},
+
+		// cleanup must keep an error handler while an asynchronous file write is in flight
+		function testStreamDownloadCleanupDuringActiveWrite(test) {
+			var fixture = Path.join( __dirname, 'fixtures/download-cleanup-race.js' );
+
+			// Isolate this test because the regression is an uncaught stream error which
+			// terminates the process before the normal request callback can be invoked.
+			ChildProcess.execFile( process.execPath, [fixture], { timeout: 5000 }, function(err, stdout, stderr) {
+				test.ok( !err, "Download cleanup child process exited cleanly: " + (stderr || err || '') );
+				test.done();
+			} );
 		},
 
 		// decompressor errors should close the download stream and callback with an error

@@ -688,11 +688,22 @@ class Request {
 				if (download_decompressor.destroy) download_decompressor.destroy();
 			}
 
-			if (download_finish_handler) download.removeListener('finish', download_finish_handler);
-			if (download_error_handler) download.removeListener('error', download_error_handler);
-
 			var stream = download;
+			var cleanup_error_handler = null;
+
+			// Destroying an fs.WriteStream with an async write still in flight can emit
+			// ERR_STREAM_DESTROYED.  Keep a handler attached until close so this expected
+			// cleanup error cannot escape as an uncaught exception.
+			if (download_owned) {
+				cleanup_error_handler = function() {};
+				stream.on('error', cleanup_error_handler);
+			}
+
+			if (download_finish_handler) stream.removeListener('finish', download_finish_handler);
+			if (download_error_handler) stream.removeListener('error', download_error_handler);
+
 			var done = function() {
+				if (cleanup_error_handler) stream.removeListener('error', cleanup_error_handler);
 				download = null;
 				callback();
 			};
