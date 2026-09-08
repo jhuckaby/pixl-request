@@ -8,6 +8,7 @@ const https = require('https');
 const querystring = require('querystring');
 const zlib = require('zlib');
 const net = require("net");
+const { urlToHttpOptions } = require('url');
 
 const FormData = require('form-data');
 const XML = require('pixl-xml');
@@ -506,8 +507,12 @@ class Request {
 			return '';
 		}).trim();
 		
-		// parse url into parts
-		var parts = require('url').parse(url);
+		// Parse using the standards-based WHATWG URL API, then convert the result
+		// into the option fields expected by Node's http.request() API.  Both steps
+		// can throw for malformed URLs, so report these through the normal callback.
+		var parts = null;
+		try { parts = urlToHttpOptions( new URL(url) ); }
+		catch (err) { return callback(err); }
 		if (!options.protocol) options.protocol = parts.protocol;
 		
 		// standardize on `hostname` instead of `host`

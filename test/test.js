@@ -303,6 +303,36 @@ module.exports = {
 			);
 		},
 		
+		function testInvalidURL(test) {
+			// malformed URLs should report an error instead of throwing synchronously
+			request.get( 'not a valid URL',
+				function(err, resp, data, perf) {
+					test.ok( !!err, "Got expected error from malformed URL" );
+					test.ok( err.message.match(/Invalid URL/i), "Got invalid URL error: " + err.message );
+					test.ok( !resp, "No response from malformed URL" );
+					test.done();
+				}
+			);
+		},
+		
+		function testURLAuth(test) {
+			// WHATWG URL credentials are encoded, but http.request expects decoded auth
+			request.json( 'http://foo%40bar:p%3Aass@127.0.0.1:3020/json', false,
+				function(err, resp, json, perf) {
+					test.ok( !err, "No error from PixlRequest: " + err );
+					test.ok( !!resp, "Got resp from PixlRequest" );
+					test.ok( resp.statusCode == 200, "Got 200 response: " + resp.statusCode );
+					test.ok( !!json, "Got JSON in response" );
+					test.ok( !!json.headers, "Found headers echoed in JSON response" );
+					test.ok(
+						json.headers.authorization == 'Basic ' + Buffer.from('foo@bar:p:ass').toString('base64'),
+						"URL credentials were decoded correctly"
+					);
+					test.done();
+				}
+			);
+		},
+		
 		// query string
 		function testQueryString(test) {
 			// test simple HTTP GET request with query string
