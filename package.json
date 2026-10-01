@@ -1,6 +1,6 @@
 {
 	"name": "pixl-request",
-	"version": "2.6.11",
+	"version": "2.6.12",
 	"description": "A very simple module for making HTTP requests.",
 	"author": "Joseph Huckaby <jhuckaby@gmail.com>",
 	"homepage": "https://github.com/jhuckaby/pixl-request",
@@ -35,7 +35,7 @@
 		"pixl-server-web": "^3.0.4"
 	},
 	"overrides": {
-		"basic-ftp": "6.0.1"
+		"basic-ftp": "6.2.1"
 	},
 	"scripts": {
 		"test": "pixl-unit test/test.js --verbose"
