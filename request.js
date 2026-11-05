@@ -15,6 +15,7 @@ const XML = require('pixl-xml');
 const Class = require('class-plus');
 const Perf = require('pixl-perf');
 const ACL = require('pixl-acl');
+const Tools = require('pixl-tools');
 const ErrNo = require('errno');
 const { ProxyAgent } = require('proxy-agent');
 
@@ -240,7 +241,7 @@ class Request {
 			
 			// parse json in response
 			var json = null;
-			try { json = JSON.parse( data.toString() ); }
+			try { json = Tools.sjson.parse( data.toString() ); }
 			catch (err) {
 				return callback( err, res, data, perf );
 			}
